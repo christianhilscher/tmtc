@@ -38,4 +38,4 @@ matched = merged_2.dropna(how = 'any').drop('patnum', axis = 1)
 
 #!Network analysis 
 #create a network of df using NetworkX lib
-network = net.from_pandas_edgelist(merged, 'owner_src', 'owner_dst', create_using = net.DiGraph())
+network = net.convert_matrix.from_pandas_edgelist(matched, source = 'owner_src', target = 'owner_dst', create_using = net.DiGraph())
