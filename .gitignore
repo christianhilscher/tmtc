@@ -133,3 +133,5 @@ dmypy.json
 /output
 /tmp
 /src/get_data/data
+.DS_Store
+/src/get_data/.DS_Store
