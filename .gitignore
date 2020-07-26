@@ -133,6 +133,7 @@ dmypy.json
 /output
 /tmp
 /src/get_data/data
+.vscode/
 <<<<<<< HEAD
 /
 =======
