@@ -3,22 +3,27 @@ using LightGraphs
 using GraphPlot
 using CSV
 using DataFrames
+using Traceur
 
-df_grants = CSV.read("/Users/christianhilscher/Desktop/tmtc/data/grant_grant.csv")
-df_cite = CSV.read("/Users/christianhilscher/Desktop/tmtc/data/grant_cite.csv")
-df_ipc = CSV.read("/Users/christianhilscher/Desktop/tmtc/data/grant_ipc.csv")
+df_grants = CSV.read("/Users/christianhilscher/Desktop/tmtc/data/grant_grant1990-2000.csv")
+df_cite = CSV.read("/Users/christianhilscher/Desktop/tmtc/data/grant_cite1990-2000.csv")
+df_ipc = CSV.read("/Users/christianhilscher/Desktop/tmtc/data/grant_ipc1990-2000.csv")
 
 
 ##############################################################################
 function assign_owners(df_citations::DataFrame, df_owners::DataFrame, n::Int64)
 
     # Assigning the owners of the source
-    owner_source = leftjoin(df_citations[1:n,:], df_owners[:,["owner", "patnum"]], on = :src => :patnum)
+    owner_source = leftjoin(df_citations[1:n,:], df_owners[:,["owner", "patnum", "pubdate"]], on = :src => :patnum)
     owner_source = rename(owner_source, "owner" => "owner_src")
 
     # Assigning the owners of the destination
     dst_source = leftjoin(owner_source, df_owners[:,["owner", "patnum"]], on = :dst => :patnum)
     dst_source = rename(dst_source, "owner" => "owner_dst")
+
+    # Adding year from pubdate
+    year_list = first.(string.(dst_source[!, "pubdate"]), 4)
+    dst_source[!, "year"] = year_list
 
     return dst_source
 end
@@ -43,23 +48,51 @@ end
 
 function make_numbers(df::DataFrame, number_df::DataFrame)
     # First source
-    df_out = leftjoin(df, number_df, on = :owner_src => :x1)
-    df_out = rename(df_out, "x2" => "owner_src_number")
+    df_joined = leftjoin(df, number_df, on = :owner_src => :x1)
+    df_joined = rename(df_joined, "x2" => "owner_src_number")
 
     # Now destination
-    df_out = leftjoin(df_out, number_df, on = :owner_dst => :x1)
-    df_out = rename(df_out, "x2" => "owner_dst_number")
+    df_joined = leftjoin(df_joined, number_df, on = :owner_dst => :x1)
+    df_joined = rename(df_joined, "x2" => "owner_dst_number")
+
+    # Delete those who cite themselves
+    cond = isequal.(df_joined[!, "owner_src_number"], df_joined[!, "owner_dst_number"])
+    df_out = df_joined[.!cond,:]
 
     return df_out
 end
 
+function unique_tuples(df::DataFrame)
+    unique_pairs = unique!(tuple.(df[!, "owner_src_number"], df[!, "owner_dst_number"]))
+
+    srcs = [unique_pairs[i][1] for i in range(1, stop=length(unique_pairs))]
+    dsts = [unique_pairs[i][2] for i in range(1, stop=length(unique_pairs))]
+
+    return srcs, dsts
+end
+
+
 function make_graph(df::DataFrame)
     # Makes the graph for further analysis
-    srcs = convert(Array{Int64}, df[!, "owner_src_number"])
-    dsts = convert(Array{Int64}, df[!, "owner_dst_number"])
+
+    # Only take unique values so that we are comparing thickets among firms not patents
+    srcs, dsts = unique_tuples(df)
 
     m = get_max(srcs, dsts)
     G = DiGraph(m)
+
+    for (i, el) in enumerate(srcs)
+        add_edge!(G, srcs[i], dsts[i])
+    end
+
+    return G
+end
+
+function make_graph2(tuples::Vector{Tuple{Int64, Int64}})
+    srcs = [tuples[i][1] for i in range(1, stop=length(tuples))]
+    dsts = [tuples[i][2] for i in range(1, stop=length(tuples))]
+    m = get_max(srcs, dsts)
+    G = Graph(m)
 
     for (i, el) in enumerate(srcs)
         add_edge!(G, srcs[i], dsts[i])
@@ -75,56 +108,64 @@ function get_max(src_numbers, dst_numbers)
     return max(max_src, max_dst)[1]
 end
 
-function get_triangles(graph)
-    mat = adjacency_matrix(graph)
-    nums = nv(graph)
-    count_ts = 0
+function make_undirected(graph::SimpleDiGraph)
 
-    for i in (1:nums)
-        for j in (1:nums)
-            for k in (1:nums)
-                cond1 = i != j
-                cond2 = i != k
-                cond3 = j != k
-                cond4 = mat[i, j] == 1
-                cond5 = mat[j, k] == 1
-                cond6 = mat[k, i] == 1
+    boths = Array{Tuple{Int64, Int64}}(undef, 0)
+    for v in vertices(graph)
+        ins = Array{Int64}(undef)
+        outs = Array{Int64}(undef)
 
-                if (cond1&cond2&cond3&cond4&cond5&cond6)
-                    count_ts += 1
-                end
+        ins = inneighbors(graph, v)
+        outs = outneighbors(graph, v)
+
+        for i in ins
+            if in(i, outs)
+                push!(boths, (v, i))
             end
         end
     end
 
-    return count_ts/3
+    return boths
+end
+
+
+function count_trs(df::DataFrame, df_cites::DataFrame)
+
+    years = unique(df[!, "year"])
+
+    trs = Array{Int64}(undef, length(years))
+    cts = Array{Int64}(undef, length(years))
+
+    for (ind, y) in enumerate(years)
+        # Taking years one-by-one
+        df_relevant = df[df[!, "year"] .== y, :]
+        df_relevant_cites = df_cites[df_cites[!, "year"] .== y, :]
+
+        G = make_graph(df_relevant)
+        T_vec = make_undirected(G)
+        G2 = make_graph2(T_vec)
+
+        # Every triangle is counted 3 times
+        tmp = triangles(G2)
+        trs[ind] = sum(tmp)/3
+        cts[ind] = size(df_relevant_cites)[1]
+    end
+
+
+    sum_trs = cumsum(trs)
+    sum_cts = cumsum(cts)
+
+    return sum_trs, sum_cts
 end
 
 ##############################################################################
 
-const n = size(df_cite)[1]
-const joined1 = assign_owners(df_cite, df_grants, n)
-const joined2 = drop_missings(joined1)
+n = size(df_cite)[1]
+const n_red = 1000000
+joined1 = assign_owners(df_cite, df_grants, 1000000)
+joined2 = drop_missings(joined1)
 joined3 = assign_numbers(joined2)
 
-G = make_graph(joined3)
+ratios = count_trs(joined3, joined1)
 
-triangles(G, vertices(G))
-
-G1 = DiGraph(4) # graph with 3 vertices
-
-# make a triangle
-add_edge!(G1, 1, 2)
-add_edge!(G1, 1, 3)
-add_edge!(G1, 2, 3)
-add_edge!(G1, 3, 2)
-add_edge!(G1, 3, 1)
-add_edge!(G1, 1, 4)
-add_edge!(G1, 4, 2)
-
-gplot(G1, nodelabel=1:4)
-
-triangles(G1, vertices(G1))
-
-
-get_triangles(G1)
+ratios[1]./ratios[2]
