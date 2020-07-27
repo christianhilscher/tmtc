@@ -59,7 +59,7 @@ function make_graph(df::DataFrame)
     dsts = convert(Array{Int64}, df[!, "owner_dst_number"])
 
     m = get_max(srcs, dsts)
-    G = Graph(m)
+    G = DiGraph(m)
 
     for (i, el) in enumerate(srcs)
         add_edge!(G, srcs[i], dsts[i])
@@ -75,10 +75,56 @@ function get_max(src_numbers, dst_numbers)
     return max(max_src, max_dst)[1]
 end
 
+function get_triangles(graph)
+    mat = adjacency_matrix(graph)
+    nums = nv(graph)
+    count_ts = 0
+
+    for i in (1:nums)
+        for j in (1:nums)
+            for k in (1:nums)
+                cond1 = i != j
+                cond2 = i != k
+                cond3 = j != k
+                cond4 = mat[i, j] == 1
+                cond5 = mat[j, k] == 1
+                cond6 = mat[k, i] == 1
+
+                if (cond1&cond2&cond3&cond4&cond5&cond6)
+                    count_ts += 1
+                end
+            end
+        end
+    end
+
+    return count_ts/3
+end
+
+##############################################################################
 
 const n = size(df_cite)[1]
-joined1 = assign_owners(df_cite, df_grants, n)
-joined2 = drop_missings(joined1)
+const joined1 = assign_owners(df_cite, df_grants, n)
+const joined2 = drop_missings(joined1)
 joined3 = assign_numbers(joined2)
 
 G = make_graph(joined3)
+
+triangles(G, vertices(G))
+
+G1 = DiGraph(4) # graph with 3 vertices
+
+# make a triangle
+add_edge!(G1, 1, 2)
+add_edge!(G1, 1, 3)
+add_edge!(G1, 2, 3)
+add_edge!(G1, 3, 2)
+add_edge!(G1, 3, 1)
+add_edge!(G1, 1, 4)
+add_edge!(G1, 4, 2)
+
+gplot(G1, nodelabel=1:4)
+
+triangles(G1, vertices(G1))
+
+
+get_triangles(G1)
