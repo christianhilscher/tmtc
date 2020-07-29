@@ -19,12 +19,14 @@ function make_df(raw_cites::DataFrame,
     owner_number = leftjoin(raw_grants, raw_firms, on = :patnum)
 
     # Getting the owners of the patents
-    owner_source = leftjoin(raw_cites, owner_number[:,["firm_num", "patnum", "pubdate"]], on = :src => :patnum)
+    owner_source = leftjoin(raw_cites, raw_firms, on = :src => :patnum)
     owner_source = rename(owner_source, "firm_num" => "firm_src")
 
     # Getting the owners of the cited patents
-    dst_source = leftjoin(owner_source, owner_number[:,["firm_num", "patnum"]], on = :dst => :patnum)
+    dst_source = leftjoin(owner_source, raw_firms, on = :dst => :patnum)
     dst_source = rename(dst_source, "firm_num" => "firm_dst")
+
+    dst_source = leftjoin(dst_source, raw_grants[:,["pubdate", "patnum"]], on = :src => :patnum)
 
     # Adding year from pubdate
     year_list = first.(string.(dst_source[!, "pubdate"]), 4)
@@ -107,33 +109,18 @@ function make_undirected(graph::SimpleDiGraph)
     return boths
 end
 
-function count_trs(df::DataFrame, df_cites::DataFrame)
+function tuple_to_vec(tpl::Vector{Tuple{Int64, Int64}})
+    # Turns a tuple into a vector
+    srcs = [tpl[i][1] for i in range(1, stop=length(tpl))]
+    dsts = [tpl[i][2] for i in range(1, stop=length(tpl))]
+    return srcs, dsts
+end
 
-    years = unique(df[!, "year"])
+function add_to_graph(graph::SimpleDiGraph, srcs, dsts)
 
-    trs = Array{Int64}(undef, length(years))
-    cts = Array{Int64}(undef, length(years))
-
-    for (ind, y) in enumerate(years)
-        # Taking years one-by-one
-        df_relevant = df[df[!, "year"] .== y, :]
-        df_relevant_cites = df_cites[df_cites[!, "year"] .== y, :]
-
-        G = make_graph(df_relevant)
-        T_vec = make_undirected(G)
-        G2 = make_graph2(T_vec)
-
-        # Every triangle is counted 3 times
-        tmp = triangles(G2)
-        trs[ind] = sum(tmp)/3
-        cts[ind] = size(df_relevant_cites)[1]
+    for (i, el) in enumerate(srcs)
+        add_edge!(graph, srcs[i], dsts[i])
     end
-
-
-    sum_trs = cumsum(trs)
-    sum_cts = cumsum(cts)
-
-    return sum_trs, sum_cts
 end
 ###############################################################################
 
@@ -147,10 +134,64 @@ df_cite = CSV.read("grant_cite1990-2000.csv")
 
 
 df1 = make_df(df_cite, df_grants, df_firm_grant)
+df1[!,"srcdst"] = tuple.(df1[!,"firm_src"], df1[!,"firm_dst"])
 
-ratios = count_trs(df1, df1)
+df2 = unique(df1, "srcdst")
+
+ratios = count_trs(df2, df2)
+
+ratios
 ratios[1]./ratios[2]
 
 plot(1990:2000, ratios[1]./ratios[2])
 
-leftjoin(df_cite, df_firm_grant, on = :src => :patnum)
+
+
+
+
+df_luci = CSV.read("net_df.csv")
+df_luci[!,["owner_src", "owner_dst", "year"]]
+df_luci = rename(df_luci, "owner_src" => "firm_src")
+df_luci = rename(df_luci, "owner_dst" => "firm_dst")
+
+
+n_directed = size(df2, 1)
+G_directed = DiGraph(n_directed)
+
+for year in 1990:2000
+    df_rel = df2[df2[!,"year"] .== string(year), :]
+    add_to_graph(G_directed, df_rel[!,"firm_src"], df_rel[!,"firm_dst"])
+end
+
+
+n_undirected = size(make_undirected(G_directed), 1)
+G_undirected = Graph(n_undirected)
+G_clean = DiGraph(n_directed)
+
+years = unique(df2[!, "year"])
+trs = Array{Int64}(undef, length(years))
+cts = Array{Int64}(undef, length(years))
+
+for (ind, year) in enumerate(years)
+    df_rel = df2[df2[!,"year"] .== string(year), :]
+    df_rel_cites = df1[df1[!,"year"] .== string(year), :]
+    add_to_graph(G_clean, df_rel[!,"firm_src"], df_rel[!,"firm_dst"])
+
+    T_vec = make_undirected(G_clean)
+    vec1, vec2 = tuple_to_vec(T_vec)
+    for (i, el) in enumerate(vec1)
+        add_edge!(G_undirected, vec1[i], vec2[i])
+    end
+
+    tmp = triangles(G_undirected)
+    trs[ind] = sum(tmp)/3
+    cts[ind] = size(df_rel_cites, 1)
+end
+
+cumsum(trs)
+
+cumsum(trs)./cumsum(cts)
+trs./cts
+plot(years, cumsum(trs)./cumsum(cts))
+
+(sum(triangles(G_undirected))/3)/size(df1, 1)
