@@ -173,10 +173,10 @@ function count_trs(df::DataFrame, df_citations::DataFrame)
         df_rel_cites = df_citations[df_citations[!,"year"] .== string(year), :]
         add_to_graph(G_clean, df_rel[!,"firm_src"], df_rel[!,"firm_dst"])
 
+
         T_vec = make_undirected(G_clean)
-        vec1, vec2 = tuple_to_vec(T_vec)
-        for (i, el) in enumerate(vec1)
-            add_edge!(G_undirected, vec1[i], vec2[i])
+        for (i, el) in enumerate(T_vec)
+            add_edge!(G_undirected, T_vec[i])
         end
 
         tmp = triangles(G_undirected)
@@ -184,7 +184,7 @@ function count_trs(df::DataFrame, df_citations::DataFrame)
         cts[ind] = size(df_rel_cites, 1)
     end
 
-    return trs, cts
+    return trs, cumsum(cts)
 end
 
 function plot_ratios(df::DataFrame,
@@ -195,7 +195,7 @@ function plot_ratios(df::DataFrame,
     xs = sort(unique(df[!,"year"]))
     triangles, cites = count_trs(df, df_cites)
 
-    ratio = cumsum(triangles)./cumsum(cites)
+    ratio = triangles./cites
     plot(xs, ratio, title=title)
     savefig(join([graph_path, name, ".png"]))
 end
@@ -216,16 +216,15 @@ df2 = drop_missings(df1)
 df3 = rm_self_citations(df2)
 df4 = make_unique(df3)
 
-plot_ratios(df_luci, df_luci, "num: Luci, denom: Luci", "10")
+plot_ratios(df4, df4, "num: only unique edges, denom: only unique edges", "4")
 
-a, b = count_trs(df3, df3)
+a, b = count_trs(df4, df4)
 
-plot(1990:2000, a./cumsum(b))
 
-# Adapting Luci's data for my purposes
-df_luci = CSV.read("net_df.csv")
-df_luci[!,["owner_src", "owner_dst", "year"]]
-df_luci = rename(df_luci, "owner_src" => "firm_src")
-df_luci = rename(df_luci, "owner_dst" => "firm_dst")
-df_luci[!,"srcdst"] = tuple.(df_luci[!,"firm_src"], df_luci[!,"firm_dst"])
-df_luci[!, "year"] = string.(df_luci[!, "year"])
+# # Adapting Luci's data for my purposes
+# df_luci = CSV.read("net_df.csv")
+# df_luci[!,["owner_src", "owner_dst", "year"]]
+# df_luci = rename(df_luci, "owner_src" => "firm_src")
+# df_luci = rename(df_luci, "owner_dst" => "firm_dst")
+# df_luci[!,"srcdst"] = tuple.(df_luci[!,"firm_src"], df_luci[!,"firm_dst"])
+# df_luci[!, "year"] = string.(df_luci[!, "year"])
