@@ -10,19 +10,35 @@ firms_path = joinpath(data_path, "firm_cluster_output/")
 graph_path = joinpath(wd, "output/graphs_CH01/")
 
 ###############################################################################
+function new_ids(df_firm::DataFrame, var::String)
+
+    df_firm = rename(df_firm, var => "tobechanged")
+    df_new = df_firm[!, ["tobechanged"]]
+    tmp_df = unique(df_new, "tobechanged")
+    tmp_df[!, "firm_id"] = 1:size(tmp_df, 1)
+
+    df_new = leftjoin(df_firm, tmp_df, on = :tobechanged)
+
+    df_new = select(df_new, Not(:tobechanged))
+    rename!(df_new, "firm_id" => var)
+
+    return df_new
+end
+
 function make_df(raw_cites::DataFrame,
     raw_grants::DataFrame,
     raw_firms::DataFrame)
 
+    edit_firms = new_ids(raw_firms, "firm_num")
     # Adding owner number
-    owner_number = leftjoin(raw_grants, raw_firms, on = :patnum)
+    owner_number = leftjoin(raw_grants, edit_firms, on = :patnum)
 
     # Getting the owners of the patents
-    owner_source = leftjoin(raw_cites, raw_firms, on = :src => :patnum)
+    owner_source = leftjoin(raw_cites, edit_firms, on = :src => :patnum)
     owner_source = rename(owner_source, "firm_num" => "firm_src")
 
     # Getting the owners of the cited patents
-    dst_source = leftjoin(owner_source, raw_firms, on = :dst => :patnum)
+    dst_source = leftjoin(owner_source, edit_firms, on = :dst => :patnum)
     dst_source = rename(dst_source, "firm_num" => "firm_dst")
 
     dst_source = leftjoin(dst_source, raw_grants[:,["pubdate", "patnum"]], on = :src => :patnum)
@@ -136,26 +152,23 @@ function add_to_graph(graph::SimpleDiGraph, srcs, dsts)
 end
 
 function count_trs(df::DataFrame, df_citations::DataFrame)
+
     n_directed = size(df, 1)
     G_directed = DiGraph(n_directed)
-
-    years = sort(unique(df[!, "year"]))
-    for year in years
-
-        df_rel = df[df[!,"year"] .== string(year), :]
-
-        add_to_graph(G_directed, df_rel[!,"firm_src"], df_rel[!,"firm_dst"])
-    end
+    # Filling first graph and make it undirected to get size of undirected one
+    add_to_graph(G_directed, df[!,"firm_src"], df[!,"firm_dst"])
 
 
     n_undirected = size(make_undirected(G_directed), 1)
     G_undirected = Graph(n_undirected)
     G_clean = DiGraph(n_directed)
 
+    years = sort(unique(df[!, "year"]))
     trs = Array{Int64}(undef, length(years))
     cts = Array{Int64}(undef, length(years))
 
     for (ind, year) in enumerate(years)
+
         df_rel = df[df[!,"year"] .== string(year), :]
         df_rel_cites = df_citations[df_citations[!,"year"] .== string(year), :]
         add_to_graph(G_clean, df_rel[!,"firm_src"], df_rel[!,"firm_dst"])
@@ -203,13 +216,16 @@ df2 = drop_missings(df1)
 df3 = rm_self_citations(df2)
 df4 = make_unique(df3)
 
-plot_ratios(df4, df4, "num: only unique, denom: only unique", "09")
+plot_ratios(df_luci, df_luci, "num: Luci, denom: Luci", "10")
 
-println(size(df4, 1))
+a, b = count_trs(df3, df3)
 
-# df_luci = CSV.read("net_df.csv")
-# df_luci[!,["owner_src", "owner_dst", "year"]]
-# df_luci = rename(df_luci, "owner_src" => "firm_src")
-# df_luci = rename(df_luci, "owner_dst" => "firm_dst")
-# df_luci[!,"srcdst"] = tuple.(df_luci[!,"firm_src"], df_luci[!,"firm_dst"])
-# df_luci[!, "year"] = string.(df_luci[!, "year"])
+plot(1990:2000, a./cumsum(b))
+
+# Adapting Luci's data for my purposes
+df_luci = CSV.read("net_df.csv")
+df_luci[!,["owner_src", "owner_dst", "year"]]
+df_luci = rename(df_luci, "owner_src" => "firm_src")
+df_luci = rename(df_luci, "owner_dst" => "firm_dst")
+df_luci[!,"srcdst"] = tuple.(df_luci[!,"firm_src"], df_luci[!,"firm_dst"])
+df_luci[!, "year"] = string.(df_luci[!, "year"])
