@@ -7,7 +7,11 @@ import os
 wd_lc = "/Users/llccf/OneDrive/Dokumente/tmtc/src/"
 wd_ch = "/Users/christianhilscher/Desktop/tmtc/"
 os.chdir(wd_lc)
-
+'''
+#answer tomorrow 
+- what to merge on what 
+- what are thicket relative to?
+'''
 #FUNCTIONS
 def merger(left, right, on, rename, drop):
     """
@@ -18,7 +22,7 @@ def merger(left, right, on, rename, drop):
     rename: tuple, (old_name, new_name)
     drop: string of column name to drop 
     """
-    merged = left.merge(right, left_on = on[0], right_on = on[1])
+    merged = left.merge(right, left_on = on[0], right_on = on[1], how = 'inner')
     merged = merged.drop(drop, axis = 1)
     merged = merged.rename(columns = {rename[0]: rename[1]})
     return(merged)
@@ -49,15 +53,27 @@ def mutuals(G):
 #DATA
 #read in all data
 #citations
-cites = pd.read_csv("get_data/data/tables/grant_cite.csv")
+cites = pd.read_csv("get_data/data/tables_90to00/grant_cite.csv")
 #main file 
-main = pd.read_csv("get_data/data/tables/grant_grant.csv")
+main = pd.read_csv("get_data/data/tables_90to00/grant_grant.csv")
 #ipc (what is this?)
-ipc = pd.read_csv("get_data/data/tables/grant_ipc.csv")
+ipc = pd.read_csv("get_data/data/tables_90to00/grant_ipc.csv")
 
 #I don't think we need the ids if we trust the pairing
-firmnum_grant = pd.read_csv("get_data/data/tables/grant_firm.csv")
-firmnums = pd.read_csv("get_data/data/tables/match.csv")
+firmnum_grant = pd.read_csv("get_data/data/tables_90to00/grant_firm.csv")
+#firm_num matched to patnum
+match = pd.read_csv("get_data/data/tables_90to00/match.csv")
+#match firm_num with id, but many ids matched to same firm_num (why???)
+pairs = pd.read_csv("get_data/data/tables_90to00/pair.csv")
+#entries of same firm with different names matched (by name and also id matched)
+#so apparently id is matched to the unique firm names, not firms as a single entity
+name = pd.read_csv("get_data/data/tables_90to00/name.csv")
+#id matched to firm name 
+firm = pd.read_csv("get_data/data/tables_90to00/firm.csv")
+#firmnum matched to id 
+
+#lets ignore match for now
+#use firm_num from firmnum_grant as the firm identifier
 
 matched = merger(cites, firmnum_grant, ('src', 'patnum'), ('firm_num', 'owner_src'), 'patnum')
 matched_total = merger(matched, firmnum_grant, ('dst', 'patnum'), ('firm_num', 'owner_dst'), 'patnum')
@@ -68,15 +84,27 @@ matched_total = merger(matched_total, year_src, ('src', 'patnum'), ('pubdate', '
 
 net_df = matched_total[['owner_src', 'owner_dst', 'year']]
 
+net_df = pd.read_csv('get_data/data/net_df.csv')
+net_df = net_df.drop('Unnamed: 0', axis = 1)
+#alternative nodes, get owner_dst and owner_src and combine them 
+#then get unique numbers 
+
+owner_src = list(dict.fromkeys(net_df['owner_src'].tolist()))
+owner_dst = list(dict.fromkeys(net_df['owner_dst'].tolist()))
+total = owner_src + owner_dst
+total_uniq = list(dict.fromkeys(total))
+#net_df = net_df[net_df['owner_src'] != net_df['owner_dst']]
 #NETWORK
 #initialize empty dictionaries to be filled with year: value
 tri_dict = {}
 citations_dict = {}
 thicket_dict = {}
 #initialize empty graph 
-G = nx.DiGraph() 
-#use the unique firm numbers as nodes of the graph
-nodes = list(dict.fromkeys(firmnums['firm_num'].tolist()))
+G = nx.MultiDiGraph() 
+#use the unique firm numbers from grant_firm.csv as nodes of the graph
+#nodes = list(dict.fromkeys(firmnum_grant['firm_num'].tolist()))
+#using above described way to get notes
+nodes = total_uniq
 G.add_nodes_from(nodes)
 #total citations counter
 tot_ref = 0
@@ -92,6 +120,7 @@ for year in range(1990, 2001):
     """
     matched_year = net_df[net_df['year'] == year]
     tot_ref = tot_ref + len(matched_year)
+    matched_year = matched_year[matched_year['owner_src'] != matched_year['owner_dst']]
     #add nodes 
     edges = list(zip(matched_year['owner_src'], matched_year['owner_dst']))
     edges = list(set([i for i in edges]))
@@ -101,7 +130,6 @@ for year in range(1990, 2001):
     for k, v in list(node_dict.items()): 
         if v == []: 
             del node_dict[k]
-
     G_new = nx.Graph(node_dict)
     tris = list(nx.triangles(G_new).values())
     tris_arr = np.array(tris)
@@ -109,6 +137,7 @@ for year in range(1990, 2001):
     thicket_dict[str(year)] = tris_sum/tot_ref
     tri_dict[str(year)] = tris_sum 
     citations_dict[str(year)] = tot_ref
+    print(str(year) + ' done')
 
 #plot 
 from bokeh.plotting import figure, output_notebook, show 
