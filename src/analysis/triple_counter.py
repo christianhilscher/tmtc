@@ -43,42 +43,44 @@ df_2 = df_full.dropna(how = "any")
 #dropping self citations 
 df_3 = df_2[df_2["owner_src"] != df_2["owner_dst"]]
 #only keeping unique edges 
-df_4 = df_3.drop_duplicates(["A", "B"], keep = "last")
+df_4 = df_3.drop_duplicates(["owner_src", "owner_dst"], keep = "last")
 
-#alternative nodes, get owner_dst and owner_src and combine them 
-#then get unique numbers 
-
-owner_src = list(dict.fromkeys(net_df['owner_src'].tolist()))
-owner_dst = list(dict.fromkeys(net_df['owner_dst'].tolist()))
-total = owner_src + owner_dst
-total_uniq = list(dict.fromkeys(total))
-#net_df = net_df[net_df['owner_src'] != net_df['owner_dst']]
 #NETWORK
+
+#FOR NOW: using df_4 for edges 
 #initialize empty dictionaries to be filled with year: value
 tri_dict = {}
 citations_dict = {}
 thicket_dict = {}
 #initialize empty graph 
 G = nx.MultiDiGraph() 
-#use the unique firm numbers from grant_firm.csv as nodes of the graph
-#nodes = list(dict.fromkeys(firmnum_grant['firm_num'].tolist()))
-#using above described way to get notes
-nodes = total_uniq
+
+#create nodes from combined list of owners_src and owners_dst 
+#drop duplicates of combined list such that each firm only appears once
+owners_src = df_2["owner_src"].tolist()
+owners_dst = df_2["owner_dst"].tolist()
+total = owners_src + owners_dst
+total = list(map(int, total))
+tot_uniq = list(dict.fromkeys(total))
+
+#add nodes to graph 
+nodes = tot_uniq
 G.add_nodes_from(nodes)
 #total citations counter
 tot_ref = 0
 #now loop over all years  
-for year in range(1990, 2001):
+for year in range(1976, 2001):
     """
     this loop: 
         - gets data for respective year 
         - adds citations from this year as edges to G 
         - makes neighbor analysis
         - creates a new graph only with nodes that have mutually directed edges 
-        - counts triangles and fills up initilaized dicts
+        - counts triangles and fills up initialized dicts
     """
-    matched_year = net_df[net_df['year'] == year]
-    tot_ref = tot_ref + len(matched_year)
+    matched_year = df_3[df_3['year'] == year]
+    citations = len(df_full[df_full["year"] == year])
+    tot_ref = tot_ref + citations
     matched_year = matched_year[matched_year['owner_src'] != matched_year['owner_dst']]
     #add nodes 
     edges = list(zip(matched_year['owner_src'], matched_year['owner_dst']))
