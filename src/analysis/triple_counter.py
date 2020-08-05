@@ -4,33 +4,11 @@ import networkx as nx
 import os
 
 #set up directory
-wd_lc = "/Users/llccf/OneDrive/Dokumente/tmtc/src/"
+wd_lc = "/Users/llccf/OneDrive/Dokumente/tmtc/"
 wd_ch = "/Users/christianhilscher/Desktop/tmtc/"
 os.chdir(wd_lc)
-'''
-#answer tomorrow 
-- what to merge on what 
-- what are thicket relative to?
-'''
+
 #FUNCTIONS
-def merger(left, right, on, rename, drop):
-    """
-    inner merge left with right
-    left: left df 
-    right: right df 
-    on: tuple, (left_on, right_on)
-    rename: tuple, (old_name, new_name)
-    drop: string of column name to drop 
-    """
-    merged = left.merge(right, left_on = on[0], right_on = on[1], how = 'inner')
-    merged = merged.drop(drop, axis = 1)
-    merged = merged.rename(columns = {rename[0]: rename[1]})
-    return(merged)
-
-def get_first(number, first = 4):
-    first = int(str(number)[:first])
-    return(first)
-
 def mutuals(G):
     """
     A function to find the list of nodes that are successors as well as 
@@ -51,41 +29,22 @@ def mutuals(G):
     return(node_dict)
 
 #DATA
-#read in all data
-#citations
-cites = pd.read_csv("get_data/data/tables_90to00/grant_cite.csv")
-#main file 
-main = pd.read_csv("get_data/data/tables_90to00/grant_grant.csv")
-#ipc (what is this?)
-ipc = pd.read_csv("get_data/data/tables_90to00/grant_ipc.csv")
-
-#I don't think we need the ids if we trust the pairing
-firmnum_grant = pd.read_csv("get_data/data/tables_90to00/grant_firm.csv")
-#firm_num matched to patnum
-match = pd.read_csv("get_data/data/tables_90to00/match.csv")
-#match firm_num with id, but many ids matched to same firm_num (why???)
-pairs = pd.read_csv("get_data/data/tables_90to00/pair.csv")
-#entries of same firm with different names matched (by name and also id matched)
-#so apparently id is matched to the unique firm names, not firms as a single entity
-name = pd.read_csv("get_data/data/tables_90to00/name.csv")
-#id matched to firm name 
-firm = pd.read_csv("get_data/data/tables_90to00/firm.csv")
-#firmnum matched to id 
-
-#lets ignore match for now
-#use firm_num from firmnum_grant as the firm identifier
-
-matched = merger(cites, firmnum_grant, ('src', 'patnum'), ('firm_num', 'owner_src'), 'patnum')
-matched_total = merger(matched, firmnum_grant, ('dst', 'patnum'), ('firm_num', 'owner_dst'), 'patnum')
-
-year_src = main[['pubdate', 'patnum']]
-year_src['pubdate'] = year_src['pubdate'].apply(get_first, args = [4])
-matched_total = merger(matched_total, year_src, ('src', 'patnum'), ('pubdate', 'year'), 'patnum')
-
-net_df = matched_total[['owner_src', 'owner_dst', 'year']]
-
-net_df = pd.read_csv('get_data/data/net_df.csv')
+#read in net_df csv created in "create_netdf.py" 
+net_df = pd.read_csv('data/net_df.csv')
 net_df = net_df.drop('Unnamed: 0', axis = 1)
+#net_df contains ALL citations, i.e. it is df_full (see description of process)
+df_full = net_df
+#df_full is df_1 
+
+#now create subsets of df_full which contian different number of citations 
+#see prelim_analysis.pdf for more 
+#dropping missing citation src or dst 
+df_2 = df_full.dropna(how = "any")
+#dropping self citations 
+df_3 = df_2[df_2["owner_src"] != df_2["owner_dst"]]
+#only keeping unique edges 
+df_4 = df_3.drop_duplicates(["A", "B"], keep = "last")
+
 #alternative nodes, get owner_dst and owner_src and combine them 
 #then get unique numbers 
 
