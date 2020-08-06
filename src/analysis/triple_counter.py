@@ -43,7 +43,8 @@ df_2 = df_full.dropna(how = "any")
 #dropping self citations 
 df_3 = df_2[df_2["owner_src"] != df_2["owner_dst"]]
 #only keeping unique edges 
-df_4 = df_3.drop_duplicates(["owner_src", "owner_dst"], keep = "last")
+#to drop all duplicates but the initial entry I guess I have to set keep = False (see pandas docs)
+df_4 = df_3.drop_duplicates(["owner_src", "owner_dst"], keep = False)
 #NETWORK
 
 #FOR NOW: using df_3 for edges 

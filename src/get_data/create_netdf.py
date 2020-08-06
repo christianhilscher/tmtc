@@ -7,7 +7,7 @@ wd_ch = "/Users/christianhilscher/Desktop/tmtc/"
 os.chdir(wd_lc)
 
 #FUNCTIONS 
-def merger(left, right, on, rename, drop):
+def merger(left, right, on, rename, drop, how = "outer"):
     """
     inner merge left with right
     left: left df 
@@ -16,7 +16,7 @@ def merger(left, right, on, rename, drop):
     rename: tuple, (old_name, new_name)
     drop: string of column name to drop 
     """
-    merged = left.merge(right, left_on = on[0], right_on = on[1], how = 'outer')
+    merged = left.merge(right, left_on = on[0], right_on = on[1], how = how)
     merged = merged.drop(drop, axis = 1)
     merged = merged.rename(columns = {rename[0]: rename[1]})
     return(merged)
@@ -54,8 +54,8 @@ matched_total = merger(matched, df_grant, ('dst', 'patnum'), ('firm_num', 'owner
 year_src = main[['pubdate', 'patnum']]
 year_src = year_src.dropna(how = "any")
 year_src['pubdate'] = year_src['pubdate'].apply(get_first, args = [4])
-matched_total = merger(matched_total, year_src, ('src', 'patnum'), ('pubdate', 'year'), 'patnum')
+matched_total = merger(matched_total, year_src, ('src', 'patnum'), ('pubdate', 'year'), 'patnum', how = "inner")
 
-net_df = matched_total[['owner_src', 'owner_dst', 'year']]
+net_df = matched_total
 #write to csv
 net_df.to_csv("data/net_df.csv")
