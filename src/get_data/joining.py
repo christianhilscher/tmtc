@@ -28,7 +28,7 @@ main00 = pd.read_csv("data/tables_to2000/grant_grant_to00.csv")
 #append togeether to get one dataset up to 2000 
 main = main89.append(main00)
 
-main.to_csv("outout/grant_grant.csv")
+main.to_csv("output/grant_grant.csv")
 
 #get citations up to 89 
 cites89 = pd.read_csv("data/tables_to2000/grant_cite_to89.csv")
