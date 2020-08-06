@@ -47,7 +47,7 @@ df_4 = df_3.drop_duplicates(["owner_src", "owner_dst"], keep = "last")
 
 #NETWORK
 
-#FOR NOW: using df_4 for edges 
+#FOR NOW: using df_3 for edges 
 #initialize empty dictionaries to be filled with year: value
 tri_dict = {}
 citations_dict = {}
