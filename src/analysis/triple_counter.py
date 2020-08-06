@@ -44,7 +44,6 @@ df_2 = df_full.dropna(how = "any")
 df_3 = df_2[df_2["owner_src"] != df_2["owner_dst"]]
 #only keeping unique edges 
 df_4 = df_3.drop_duplicates(["owner_src", "owner_dst"], keep = "last")
-
 #NETWORK
 
 #FOR NOW: using df_3 for edges 
@@ -53,7 +52,7 @@ tri_dict = {}
 citations_dict = {}
 thicket_dict = {}
 #initialize empty graph 
-G = nx.MultiDiGraph() 
+G = nx.DiGraph() 
 
 #create nodes from combined list of owners_src and owners_dst 
 #drop duplicates of combined list such that each firm only appears once
@@ -78,7 +77,7 @@ for year in range(1976, 2001):
         - creates a new graph only with nodes that have mutually directed edges 
         - counts triangles and fills up initialized dicts
     """
-    matched_year = df_3[df_3['year'] == year]
+    matched_year = df_4[df_4['year'] == year]
     citations = len(df_full[df_full["year"] == year])
     tot_ref = tot_ref + citations
     matched_year = matched_year[matched_year['owner_src'] != matched_year['owner_dst']]
@@ -102,6 +101,7 @@ for year in range(1976, 2001):
 
 #plot 
 from bokeh.plotting import figure, output_notebook, show 
+from bokeh.io import export_png
 output_notebook()
 p = figure(plot_width = 500, plot_height = 500, 
         x_axis_label = 'Year', y_axis_label = 'share of patent thickets', 
@@ -109,3 +109,4 @@ p = figure(plot_width = 500, plot_height = 500,
 p.line(list(thicket_dict.keys()), list(thicket_dict.values()), 
         line_width = 2)
 show(p)
+#export_png(p, "ouput/figure1.png")
