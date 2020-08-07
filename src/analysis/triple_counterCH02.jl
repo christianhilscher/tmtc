@@ -1,11 +1,13 @@
 using Pkg
-using LightGraphs, GraphPlot, MetaGraphs
+using LightGraphs, MetaGraphs
 using CSV, DataFrames
-using Plots
+using PlotlyJS
 
 wd = "/Users/christianhilscher/Desktop/tmtc/"
 
-data_path = joinpath(wd, "data/tmp/")
+data_path = joinpath(wd, "data/")
+data_path_full = joinpath(wd, "data/full/")
+data_path_tmp = joinpath(wd, "data/tmp/")
 graph_path = joinpath(wd, "output/tmp/")
 
 ###############################################################################
@@ -22,6 +24,61 @@ function new_ids(df_firm::DataFrame, var::String)
     rename!(df_new, "firm_id" => var)
 
     return df_new
+end
+
+function make_df(raw_cites::DataFrame,
+    raw_grants::DataFrame,
+    raw_firms::DataFrame)
+
+    edit_firms = new_ids(raw_firms, "firm_num")
+
+    # Getting the owners of the patents
+    owner_source = leftjoin(raw_cites, edit_firms, on = :src => :patnum)
+    owner_source = rename(owner_source, "firm_num" => "firm_src")
+
+    # Getting the owners of the cited patents
+    dst_source = leftjoin(owner_source, edit_firms, on = :dst => :patnum)
+    dst_source = rename(dst_source, "firm_num" => "firm_dst")
+
+    dst_source = leftjoin(dst_source, raw_grants[:,["pubdate", "patnum", "ipc", "ipcver"]], on = :src => :patnum)
+
+    # Adding year from pubdate
+    year_list = first.(string.(dst_source[!, "pubdate"]), 4)
+    dst_source[!, "year"] = year_list
+
+    # Narrowing it down
+    df_out = dst_source[!, ["year", "firm_dst", "firm_src", "ipc", "ipcver"]]
+
+    return df_out
+end
+
+function add_ipc(df::DataFrame, df_ipc::DataFrame)
+
+    df_ipc = unique(df_ipc, "ipc_code")
+
+    df = dropmissing(df, "ipc")
+    df[!, "ipc_code"] = first.(df[!, "ipc"], 4)
+    df_ipc = leftjoin(df, unique(df_ipc, "ipc_code"), on = :ipc_code)
+
+    return df_ipc
+end
+
+function drop_missings(df::DataFrame)
+    df_out = dropmissing(df)
+    return df_out
+end
+
+function rm_self_citations(df::DataFrame)
+    # Removing those who cite themselves
+    df_out = filter(x -> x["firm_src"] .!= x["firm_dst"], df)
+    return df_out
+end
+
+function make_unique(df::DataFrame)
+    # Only keeping unique combinations of firms
+    df[!,"srcdst"] = tuple.(df[!,"firm_src"], df[!,"firm_dst"])
+
+    return unique(df, "srcdst")
 end
 
 function make_undirected(graph::SimpleDiGraph)
@@ -69,8 +126,8 @@ function count_trs(df::DataFrame, df_citations::DataFrame)
 
     for (ind, year) in enumerate(years)
 
-        df_rel = df[df[!,"year"] .== string(year), :]
-        df_rel_cites = df_citations[df_citations[!,"year"] .== string(year), :]
+        df_rel = df[df[!,"year"] .== year, :]
+        df_rel_cites = df_citations[df_citations[!,"year"] .== year, :]
         add_to_graph(G_clean, df_rel[!,"firm_src"], df_rel[!,"firm_dst"])
 
 
@@ -100,11 +157,59 @@ function plot_ratios(df::DataFrame,
     savefig(join([graph_path, name, ".png"]))
 end
 
+
+function get_results(df::DataFrame, df_cites::DataFrame)
+
+    df_d = df[df[!, "technology"] .== "discrete",:]
+    df_c = df[df[!, "technology"] .== "complex",:]
+
+    xs = sort(unique(df_cites[!,"year"]))
+    a_d, b_d = count_trs(df_d, df_cites)
+    a_c, b_c = count_trs(df_c, df_cites)
+
+    res = DataFrame(year_list = xs, trs_d = a_d, trs_c = a_c, cites = b_d)
+
+    res[!, "ratio_d"] = res[!,"trs_d"]./res[!,"cites"]
+
+    res[!, "ratio_c"] = res[!,"trs_c"]./res[!,"cites"]
+    return res
+end
+
+function linescatter1(df::DataFrame)
+    trace1 = scatter(df, x = :year_list, y = :ratio_d, mode="lines", name="discrete industries")
+
+    trace2 = scatter(df, x = :year_list, y = :ratio_c, mode="lines", name="complex industries")
+
+    plot([trace1, trace2])
+end
 ###############################################################################
+## Reading in and making data
 
-cd(data_path)
+# cd(data_path_full)
+# df_firm_grant = CSV.read("grant_firm.csv")
+# df_grants = CSV.read("grant_grant.csv")
+# df_cite = CSV.read("grant_cite.csv")
+#
+# cd(data_path_tmp)
+# df_ipc = CSV.read("ipcs.csv")
+# cd(data_path_full)
+#
+# df1 = make_df(df_cite, df_grants, df_firm_grant)
+# df1 = add_ipc(df1, df_ipc)
+# df2 = drop_missings(df1)
+# df3 = rm_self_citations(df2)
+# df4 = make_unique(df3)
+## Loading finished data
 
+cd(data_path_tmp)
 df1 = CSV.read("df1.csv")
 df2 = CSV.read("df2.csv")
 df3 = CSV.read("df3.csv")
 df4 = CSV.read("df4.csv")
+
+## Calculating and plotting
+plot_ratios(df4, df1, "Triangles/Total Citations", "1")
+
+abc = get_results(df4, df1)
+
+linescatter1(abc)
