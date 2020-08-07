@@ -1,11 +1,11 @@
 using Pkg
-using LightGraphs, GraphPlot, MetaGraphs
+using LightGraphs, MetaGraphs
 using CSV, DataFrames
 using PlotlyJS
 
 wd = "/Users/christianhilscher/Desktop/tmtc/"
 
-data_path = joinpath(wd, "data/full/")
+data_path = joinpath(wd, "data/tmp/")
 graph_path = joinpath(wd, "output/tmp/")
 
 ###############################################################################
@@ -99,15 +99,11 @@ end
 ###############################################################################
 
 cd(data_path)
-df_firm_grant = CSV.read("grant_firm.csv")
-df_grants = CSV.read("grant_grant.csv")
-df_cite = CSV.read("grant_cite.csv")
+df1 = CSV.read("df1.csv")
+df2 = CSV.read("df2.csv")
+df3 = CSV.read("df3.csv")
+df4 = CSV.read("df4.csv")
 
-
-df1 = make_df(df_cite, df_grants, df_firm_grant)
-df2 = drop_missings(df1)
-df3 = rm_self_citations(df2)
-df4 = make_unique(df3)
 
 
 cites = count_cites(df2, "cites")
@@ -115,29 +111,30 @@ print(describe(cites))
 histo01(cites)
 
 # Missings
+year_ls = sort(unique(df1[!,"year"]))
 
-a = zeros(11)
-b = zeros(11)
+a = zeros(length(year_ls))
+b = zeros(length(year_ls))
 
-for (ind, y) in enumerate(range(1990, stop=2000))
+for (ind, y) in enumerate(year_ls)
 
     a[ind] = size(df1[df1[!,"year"].==string(y),:], 1)
     b[ind] = size(dropmissing(df1[df1[!,"year"].==string(y),:]), 1)
 
 end
 
+a1 = cumsum(a)
+b1 = cumsum(b)
+
 function linescatter1()
+    trace1 = scatter(;x=year_ls, y=a1, mode="lines", name="total citations")
 
-    tr1 = scatter(;x = 1990:2000, y = a, mode = "lines", name = "total citations")
+    trace2 = scatter(;x=year_ls, y=b1, mode="lines", name="without missings")
 
-    tr2 = scatter(;x = 1990:2000, y = b, mode = "lines", name = "citations without missings")
-
-    tr3 = bar(;x = 1990:2000, y = a-b, name = "missings", opacity=0.5)
-
-    data = [tr1, tr2, tr3]
-    plot(data)
+    trace3 = bar(;x=year_ls, y=a1-b1, opacity=0.5, name="missings")
+    plot([trace1, trace2, trace3])
 end
-
 linescatter1()
+unique(df1)
 
-df3
+print(names(df3))

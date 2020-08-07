@@ -1,90 +1,27 @@
 using Pkg
-using LightGraphs
-using GraphPlot
-using CSV
-using DataFrames
-using Traceur
+using LightGraphs, GraphPlot, MetaGraphs
+using CSV, DataFrames
 using Plots
 
 wd = "/Users/christianhilscher/Desktop/tmtc/"
-data_path = joinpath(wd, "data/")
-firms_path = joinpath(data_path, "firm_cluster_output/")
+
+data_path = joinpath(wd, "data/tmp/")
+graph_path = joinpath(wd, "output/tmp/")
 
 ###############################################################################
-function make_df(raw_cites::DataFrame,
-    raw_grants::DataFrame,
-    raw_firms::DataFrame)
+function new_ids(df_firm::DataFrame, var::String)
 
-    # Adding owner number
-    owner_number = leftjoin(raw_grants, raw_firms, on = :patnum)
+    df_firm = rename(df_firm, var => "tobechanged")
+    df_new = df_firm[!, ["tobechanged"]]
+    tmp_df = unique(df_new, "tobechanged")
+    tmp_df[!, "firm_id"] = 1:size(tmp_df, 1)
 
-    # Getting the owners of the patents
-    owner_source = leftjoin(raw_cites, owner_number[:,["firm_num", "patnum", "pubdate"]], on = :src => :patnum)
-    owner_source = rename(owner_source, "firm_num" => "firm_src")
+    df_new = leftjoin(df_firm, tmp_df, on = :tobechanged)
 
-    # Getting the owners of the cited patents
-    dst_source = leftjoin(owner_source, owner_number[:,["firm_num", "patnum"]], on = :dst => :patnum)
-    dst_source = rename(dst_source, "firm_num" => "firm_dst")
+    df_new = select(df_new, Not(:tobechanged))
+    rename!(df_new, "firm_id" => var)
 
-    # Adding year from pubdate
-    year_list = first.(string.(dst_source[!, "pubdate"]), 4)
-    dst_source[!, "year"] = year_list
-
-    # Narrowing it down
-    narrow_df = dst_source[!, ["year", "firm_dst", "firm_src"]]
-
-    # Dropping missings
-    df_kept = dropmissing(narrow_df)
-    # Removing those who cite themselves
-    df_out = filter(x -> x["firm_src"] .!= x["firm_dst"], df_kept)
-
-    return df_out
-end
-
-function unique_tuples(df::DataFrame)
-    unique_pairs = unique!(tuple.(df[!, "firm_src"], df[!, "firm_dst"]))
-
-    srcs = [unique_pairs[i][1] for i in range(1, stop=length(unique_pairs))]
-    dsts = [unique_pairs[i][2] for i in range(1, stop=length(unique_pairs))]
-
-    return srcs, dsts
-end
-
-
-function make_graph(df::DataFrame)
-    # Makes the graph for further analysis
-
-    # Only take unique values so that we are comparing thickets among firms not patents
-    srcs, dsts = unique_tuples(df)
-
-    m = get_max(srcs, dsts)
-    G = DiGraph(m)
-
-    for (i, el) in enumerate(srcs)
-        add_edge!(G, srcs[i], dsts[i])
-    end
-
-    return G
-end
-
-function make_graph2(tuples::Vector{Tuple{Int64, Int64}})
-    srcs = [tuples[i][1] for i in range(1, stop=length(tuples))]
-    dsts = [tuples[i][2] for i in range(1, stop=length(tuples))]
-    m = get_max(srcs, dsts)
-    G = Graph(m)
-
-    for (i, el) in enumerate(srcs)
-        add_edge!(G, srcs[i], dsts[i])
-    end
-
-    return G
-end
-
-function get_max(src_numbers, dst_numbers)
-    max_src = findmax(src_numbers)[1]
-    max_dst = findmax(dst_numbers)[1]
-
-    return max(max_src, max_dst)[1]
+    return df_new
 end
 
 function make_undirected(graph::SimpleDiGraph)
@@ -107,50 +44,67 @@ function make_undirected(graph::SimpleDiGraph)
     return boths
 end
 
-function count_trs(df::DataFrame, df_cites::DataFrame)
+function add_to_graph(graph::SimpleDiGraph, srcs, dsts)
 
-    years = unique(df[!, "year"])
+    for (i, el) in enumerate(srcs)
+        add_edge!(graph, srcs[i], dsts[i])
+    end
+end
 
+function count_trs(df::DataFrame, df_citations::DataFrame)
+
+    n_directed = size(df, 1)
+    G_directed = DiGraph(n_directed)
+    # Filling first graph and make it undirected to get size of undirected one
+    add_to_graph(G_directed, df[!,"firm_src"], df[!,"firm_dst"])
+
+
+    n_undirected = size(make_undirected(G_directed), 1)
+    G_undirected = Graph(n_undirected)
+    G_clean = DiGraph(n_directed)
+
+    years = sort(unique(df[!, "year"]))
     trs = Array{Int64}(undef, length(years))
     cts = Array{Int64}(undef, length(years))
 
-    for (ind, y) in enumerate(years)
-        # Taking years one-by-one
-        df_relevant = df[df[!, "year"] .== y, :]
-        df_relevant_cites = df_cites[df_cites[!, "year"] .== y, :]
+    for (ind, year) in enumerate(years)
 
-        G = make_graph(df_relevant)
-        T_vec = make_undirected(G)
-        G2 = make_graph2(T_vec)
+        df_rel = df[df[!,"year"] .== string(year), :]
+        df_rel_cites = df_citations[df_citations[!,"year"] .== string(year), :]
+        add_to_graph(G_clean, df_rel[!,"firm_src"], df_rel[!,"firm_dst"])
 
-        # Every triangle is counted 3 times
-        tmp = triangles(G2)
+
+        T_vec = make_undirected(G_clean)
+        for (i, el) in enumerate(T_vec)
+            add_edge!(G_undirected, T_vec[i])
+        end
+
+        tmp = triangles(G_undirected)
         trs[ind] = sum(tmp)/3
-        cts[ind] = size(df_relevant_cites)[1]
+        cts[ind] = size(df_rel_cites, 1)
     end
 
-
-    sum_trs = cumsum(trs)
-    sum_cts = cumsum(cts)
-
-    return sum_trs, sum_cts
+    return trs, cumsum(cts)
 end
+
+function plot_ratios(df::DataFrame,
+    df_cites::DataFrame,
+    title::String,
+    name::String)
+
+    xs = sort(unique(df[!,"year"]))
+    triangles, cites = count_trs(df, df_cites)
+
+    ratio = triangles./cites
+    plot(xs, ratio, title=title, label = "ratio")
+    savefig(join([graph_path, name, ".png"]))
+end
+
 ###############################################################################
 
-cd(firms_path)
-df_firm_grant = CSV.read("grant_firm.csv")
-#matches patnum to firm_num
-
 cd(data_path)
-df_grants = CSV.read("grant_grant1990-2000.csv")
-df_cite = CSV.read("grant_cite1990-2000.csv")
 
-
-df1 = make_df(df_cite, df_grants, df_firm_grant)
-
-ratios = count_trs(df1, df1)
-ratios[1]./ratios[2]
-
-plot(1990:2000, ratios[1]./ratios[2])
-
-leftjoin(df_cite, df_firm_grant, on = :src => :patnum)
+df1 = CSV.read("df1.csv")
+df2 = CSV.read("df2.csv")
+df3 = CSV.read("df3.csv")
+df4 = CSV.read("df4.csv")
