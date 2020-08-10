@@ -29,23 +29,23 @@ function make_df(raw_cites::DataFrame,
     raw_firms::DataFrame)::DataFrame
 
     edit_firms = new_ids(raw_firms, "firm_num")
-    owner_number = leftjoin(raw_grants, edit_firms, on = :patnum)
+    owner_number = leftjoin(raw_grants, edit_firms, on = :firm_src)
 
     # Getting the owners of the patents
-    owner_source = leftjoin(raw_cites, edit_firms, on = :src => :patnum)
+    owner_source = leftjoin(raw_cites, edit_firms, on = :src => :firm_src)
     owner_source = rename(owner_source, "firm_num" => "firm_src")
 
     # Getting the owners of the cited patents
-    dst_source = leftjoin(owner_source, edit_firms, on = :dst => :patnum)
+    dst_source = leftjoin(owner_source, edit_firms, on = :dst => :firm_src)
     dst_source = rename(dst_source, "firm_num" => "firm_dst")
 
-    full = leftjoin(owner_number, dst_source, on = :patnum => :src)
+    full = leftjoin(owner_number, dst_source, on = :firm_src => :src)
 
     # Adding year from pubdate
     year_list = first.(string.(full[!, "pubdate"]), 4)
     full[!, "year"] = year_list
 
-    return full[!,["patnum", "pubdate", "ipc", "ipcver", "dst", "firm_src", "firm_dst", "year"]]
+    return full[!,["firm_src", "pubdate", "ipc", "ipcver", "dst", "firm_src", "firm_dst", "year"]]
 end
 
 function drop_missings(df::DataFrame)
@@ -70,18 +70,18 @@ function count_cites(df::DataFrame, type::String)::DataFrame
 
     cited = Array{Int64}(undef, 1)
     if type == "being_cited"
-        unique_pats = groupby(df, :patnum)
+        unique_pats = groupby(df, :firm_src)
         cited = Array{Int64}(undef, length(unique_pats))
 
         for (ind, el) in enumerate(unique_pats)
-            cited[ind] = length(unique(el[!,"dst"]))
+            cited[ind] = length(unique(el[!,"firm_dst"]))
         end
     elseif type == "cites"
-        unique_pats = groupby(df, :dst)
+        unique_pats = groupby(df, :firm_dst)
         cited = Array{Int64}(undef, length(unique_pats))
 
         for (ind, el) in enumerate(unique_pats)
-            cited[ind] = length(unique(el[!,"patnum"]))
+            cited[ind] = length(unique(el[!,"firm_src"]))
         end
     else
         println("Choose either 'cites' or 'being_cited'.")
@@ -106,7 +106,7 @@ df4 = CSV.read("df4.csv")
 
 
 
-cites = count_cites(df2, "cites")
+cites = count_cites(df2, "being_cited")
 print(describe(cites))
 histo01(cites)
 
