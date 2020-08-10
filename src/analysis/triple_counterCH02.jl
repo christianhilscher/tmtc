@@ -29,6 +29,9 @@ end
 function make_df(raw_cites::DataFrame,
     raw_grants::DataFrame,
     raw_firms::DataFrame)
+    """
+    Takes the raw data files and merges them into somthing useable
+    """
 
     edit_firms = new_ids(raw_firms, "firm_num")
 
@@ -53,6 +56,9 @@ function make_df(raw_cites::DataFrame,
 end
 
 function add_ipc(df::DataFrame, df_ipc::DataFrame)
+    """
+    Adding the ipc classification to the main dataframe
+    """
 
     df_ipc = unique(df_ipc, "ipc_code")
 
@@ -66,7 +72,7 @@ end
 function drop_missings(df::DataFrame)
     df_out = dropmissing(df)
     return df_out
-end
+end"
 
 function rm_self_citations(df::DataFrame)
     # Removing those who cite themselves
@@ -82,8 +88,12 @@ function make_unique(df::DataFrame)
 end
 
 function make_undirected(graph::SimpleDiGraph)
+    """
+    Takes a graph object as input and only returns those neighbors who cite both ways
+    """
 
     boths = Array{Tuple{Int64, Int64}}(undef, 0)
+    # Loop over every vertice
     for v in vertices(graph)
         ins = Array{Int64}(undef)
         outs = Array{Int64}(undef)
@@ -91,6 +101,7 @@ function make_undirected(graph::SimpleDiGraph)
         ins = inneighbors(graph, v)
         outs = outneighbors(graph, v)
 
+        # Loop over all neighbors of vertice v to see whether the connection goes both ways
         for i in ins
             if in(i, outs)
                 push!(boths, (v, i))
@@ -110,12 +121,13 @@ end
 
 function count_trs(df::DataFrame, df_citations::DataFrame)
 
+    # First making a directed graph to get the neighbors later
     n_directed = size(df, 1)
     G_directed = DiGraph(n_directed)
     # Filling first graph and make it undirected to get size of undirected one
     add_to_graph(G_directed, df[!,"firm_src"], df[!,"firm_dst"])
 
-
+    # Initializing later graphs
     n_undirected = size(make_undirected(G_directed), 1)
     G_undirected = Graph(n_undirected)
     G_clean = DiGraph(n_directed)
@@ -124,23 +136,26 @@ function count_trs(df::DataFrame, df_citations::DataFrame)
     trs = Array{Int64}(undef, length(years))
     cts = Array{Int64}(undef, length(years))
 
+    # Counting each year separately
     for (ind, year) in enumerate(years)
 
         df_rel = df[df[!,"year"] .== year, :]
         df_rel_cites = df_citations[df_citations[!,"year"] .== year, :]
         add_to_graph(G_clean, df_rel[!,"firm_src"], df_rel[!,"firm_dst"])
 
-
+        # Keeping only those where the connection goes both ways
         T_vec = make_undirected(G_clean)
         for (i, el) in enumerate(T_vec)
             add_edge!(G_undirected, T_vec[i])
         end
 
+        # Counting triangles in that graph only containing both directions
         tmp = triangles(G_undirected)
         trs[ind] = sum(tmp)/3
         cts[ind] = size(df_rel_cites, 1)
     end
 
+    # Since the triangles add up over the years also use the cumulative sum for citations
     return trs, cumsum(cts)
 end
 
@@ -167,6 +182,9 @@ end
 
 function count_by_fields(df::DataFrame, df_citations::DataFrame, variable::String)
 
+    """
+    Counting triangles but differentiating by some variable first.
+    """
     categories = sort(unique(df[!, variable]))
 
     xs = sort(unique(df_citations[!,"year"]))
@@ -230,7 +248,7 @@ overall = count_trs(df4, df2)
 technology_results = count_by_fields(df4, df2, "technology")
 field_results = count_by_fields(df4, df2, "field_num")
 
-
+# Functions for plotting
 function absolute_triples(df::DataFrame)
 
     trace1 = scatter(df, x = :year, y = :trs_discrete, mode="lines", name="discrete triples")

@@ -28,6 +28,10 @@ function make_df(raw_cites::DataFrame,
     raw_grants::DataFrame,
     raw_firms::DataFrame)::DataFrame
 
+    """
+    Takes the raw data files and merges them into somthing useable
+    """
+
     edit_firms = new_ids(raw_firms, "firm_num")
     owner_number = leftjoin(raw_grants, edit_firms, on = :firm_src)
 
@@ -67,7 +71,12 @@ function make_unique(df::DataFrame)
 end
 
 function count_cites(df::DataFrame, type::String)::DataFrame
-
+    """
+    Counts the citations depending on
+    * type=="cites": how many patents are being cited by particular patent X
+    * type=="being_cited": how many patents cite particular patent X
+    """
+    
     cited = Array{Int64}(undef, 1)
     if type == "being_cited"
         unique_pats = groupby(df, :firm_src)
