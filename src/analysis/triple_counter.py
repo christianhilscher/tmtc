@@ -116,6 +116,12 @@ tri_com = tri_dict_all["complex"]
 cit_total = cit_dict_all["total"]
 cit_list = np.array(list(cit_total.values()))
 
+#! Analysis by ipc 
+ipcs = {}
+for x, y, z in zip(df_2["firm_dst"], df_2["firm_src"], df_2["field_num"]):
+    ipcs[(x, y)] = z
+ipcs = 
+
 #!Plot 
 from bokeh.plotting import figure, output_notebook, show 
 from bokeh.io import export_png
