@@ -57,7 +57,6 @@ grant_cite_to89 = pd.read_csv("data/tables_to2000/grant_cite_to89.csv")
 grant_cite_to00 = pd.read_csv("data/tables_to2000/grant_cite_to00.csv")
 grant_cite = grant_cite_to89.append(grant_cite_to00)
 
-
 #*########
 #! Number of patents
 #*########
@@ -129,7 +128,6 @@ src_3 = src_owner[(src_owner["src"].isnull() == False) & (src_owner["patnum"].is
 #how many pats are mentioned in src but not in main? 
 src_3_miss = len(src_3) #0 !
 
-
 #*info missing on dst 
 dst = pd.DataFrame(grant_cite["dst"].drop_duplicates())
 dst_owner = dst.merge(owner, left_on = "dst", right_on = "patnum", how = "outer")
@@ -169,6 +167,7 @@ src_dst["src"] = src_dst["pat"].isin(src["src"])
 
 src_dst_owner = src_dst.merge(owner, left_on = "pat", right_on = "patnum", how = "left", indicator = True)
 tot = src_dst_owner
+
 """
 Now want to find out: 
     1. how many "pat" have no match? 
@@ -227,3 +226,38 @@ Summary:
     - missing owners are mostly of patents which are both, src and dst
         - this is quite bad for us since we are interested in patents that are both/firms that own both
 """
+
+#*########
+#! Visualizations
+#*########
+from bokeh.io import output_notebook, show
+from bokeh.plotting import figure
+from bokeh.models import ColumnDataSource
+output_notebook()
+
+categories = ["owners"]
+shares = ["src", "src & dst", "dst"]
+colors = ["#c9d9d3", "#718dbf", "#e84d60"]
+
+both_data = {"categories" : categories, "src" : [share_6*100], "src & dst" : [share_8*100], "dst" : [share_7*100]}
+source = ColumnDataSource(both_data)
+
+fig = figure(x_range = categories, plot_height = 250, title = "Missings", toolbar_location = None)
+fig.vbar_stack(shares, x = "categories", width = 0.5, source = source, color = ["green", "blue", "red"], 
+            legend_label = shares)
+
+fig.y_range.start = 0
+fig.x_range.range_padding = 0.1
+fig.xgrid.grid_line_color = None
+fig.axis.minor_tick_line_color = None
+fig.outline_line_color = None
+fig.legend.location = "top_right"
+fig.legend.orientation = "vertical"
+
+show(fig)
+
+sum_data = {"Patents": [no_pats_cite, no_pats_cited, no_pats_cit], 
+                "Missings SRC": [src_1_miss, src_2_miss, src_3_miss], 
+                "Missings DST": [dst_1_miss, dst_2_miss, dst_3_miss],
+                "Missing owners shares": [share_6 * 100, share_7 * 100, share_8 * 100]}
+summary_df = pd.DataFrame(data = sum_data)
