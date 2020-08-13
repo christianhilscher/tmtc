@@ -2,3 +2,5 @@ pandas
 numpy 
 networkx 
 editdistance
+bokeh 
+os

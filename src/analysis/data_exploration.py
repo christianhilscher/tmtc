@@ -1,6 +1,11 @@
 import numpy as np 
 import pandas as pd 
 import os 
+from bokeh.io import output_notebook, show
+from bokeh.plotting import figure
+from bokeh.models import ColumnDataSource
+
+output_notebook()
 
 #set up working directory 
 wd_lc = "/Users/llccf/OneDrive/Dokumente/tmtc/"
@@ -11,11 +16,11 @@ def get_first(number, first = 4):
     return(first)
 
 #!#####################
-#! Missings inquiry 
+#! MISSINGS INQUIRY
 #!#####################
 
 #*########
-#! Data 
+#! DATA
 #*########
 """
 #number of obs.: 269800
@@ -49,24 +54,22 @@ grant_match = grant_match_to89.append(grant_match_to00)
 
 #below of most interest
 #number of obs.: 1986871
-grant_firm_to89 = pd.read_csv("data/tables_to2000/grant_firm_to89.csv")
-grant_firm_to00 = pd.read_csv("data/tables_to2000/grant_firm_to00.csv")
-grant_firm = grant_firm_to89.append(grant_firm_to00)
+grant_firm = pd.read_csv("data/grant_firm.csv")
 
 #number of obs.: 2436225
-grant_grant_to89 = pd.read_csv("data/tables_to2000/grant_grant_to89.csv")
-grant_grant_to00 = pd.read_csv("data/tables_to2000/grant_grant_to00.csv")
-grant_grant = grant_grant_to89.append(grant_grant_to00)
+grant_grant = pd.read_csv("data/grant_grant.csv")
 
 #number of obs.: 19581061
-grant_cite_to89 = pd.read_csv("data/tables_to2000/grant_cite_to89.csv")
-grant_cite_to00 = pd.read_csv("data/tables_to2000/grant_cite_to00.csv")
-grant_cite = grant_cite_to89.append(grant_cite_to00)
+grant_cite = pd.read_csv("data/grant_cite.csv")
 
-
+#Patentsview 
+pv = pd.read_csv("data/patentsview/rawassignee.tsv", sep = "\t")
+cits = pd.read_csv("data/patentsview/uspatentcitation.tsv", sep = "\t")
+cits["year"] =  cits["date"].apply(get_first)
+cits_red = cits[cits["year"] < 2001]
 
 #*########
-#! Number of patents
+#! NUMBER OF PATENTS
 #*########
 
 #*how many unique patents exist? 
@@ -104,7 +107,7 @@ Summary:
 """
 
 #*########
-#! Missings per category (src and dst)
+#! MISSINGS PER CATEGORY (SRC AND DST)
 #*########
 
 #*get an owner list 
@@ -162,7 +165,7 @@ dst_3 = dst_owner[(dst_owner["dst"].isnull() == False) & (dst_owner["patnum"].is
 dst_3_miss = len(dst_3) # 1,843,072!
 
 #*########
-#! Shares of missings
+#! SHARES OF MISSINGS
 #*########
 
 """
@@ -237,13 +240,66 @@ Summary:
 """
 
 #*########
-#! Missings by year
+#! PATENTSVIEW DATA
+#*########
+
+#* USING RAWASSIGNEE DATASET
+#merge unique firm names from patent parser with unique firm names 
+#from patentsview
+firms_parser = owner["owner"].dropna().tolist()
+firms_parser = list(dict.fromkeys(firms_parser))
+firms_parser = pd.DataFrame(firms_parser).rename(columns = {0: "firms"})
+firms_parser["firms"] = firms_parser["firms"].str.lower()
+firms_pv = pv["organization"].dropna().tolist()
+firms_pv = list(dict.fromkeys(firms_pv))
+firms_pv = pd.DataFrame(firms_pv).rename(columns = {0: "firms"})
+firms_pv = pd.DataFrame(firms_pv["firms"].str.lower())
+
+#check which firms are matched, which firms are only parser df and which ones only in patentsview
+firms_match = firms_parser.merge(firms_pv, left_on = "firms", right_on = "firms", how = "outer", indicator = True)
+both = firms_match[firms_match["_merge"] == "both"].reset_index()
+parser = firms_match[firms_match["_merge"] == "left_only"].reset_index()
+pv = firms_match[firms_match["_merge"] == "right_only"].reset_index()
+
+both_share = len(both)/len(firms_match)
+parser_share = len(parser)/len(firms_match)
+pv_share = len(pv)/len(firms_match)
+shares = [both_share, parser_share, pv_share]
+x = [1, 2, 3]
+ticks = {1: "both", 2: "Parser", 3: "Patentsview"}
+
+#* PLOT
+plot = figure(plot_width = 500, plot_height = 500, 
+            title = "Share of firm matches; total number of firms: 742518", 
+            x_axis_label = "Datasource", y_axis_label = "Percentage")
+plot.vbar(x = x, top = shares, width = 0.9)
+plot.xaxis.ticker = list(ticks.keys())
+plot.xaxis.major_label_overrides = ticks 
+plot.xaxis.major_label_orientation = 0.8 
+show(plot)
+export_png(plot, filename = "output/tmp/match_pv.png")
+
+#* HOW MANY OF MISSINGS IN PARSER ARE MATCHED NOW 
+pv_pats = pv[["patent_id", "organization"]]
+pv_pats = pv_pats.drop_duplicates(subset = ["patent_id"], keep = "first")
+dst_missings = pat_3[["pat"]]
+match_missings = dst_missings.merge(pv_pats, left_on = "pat", right_on = "patent_id", how = "outer", indicator = True)
+"""
+Only 474 patents added, strongly suggesting that the missing citations 
+are indeed data from other patent systems or non-patent citations. 
+"""
+
+#*########
+#! MISSINGS BY YEAR
 #*########
 owner_year = grant_grant[["owner", "patnum", "pubdate"]]
 owner_year["year"] = owner_year["pubdate"].apply(get_first)
 
+
+
+
 #*########
-#! Visualizations
+#! PLOTS
 #*########
 from bokeh.io import output_notebook, show
 from bokeh.plotting import figure
@@ -278,22 +334,3 @@ sum_data = {"Patents": [no_pats_cite, no_pats_cited, no_pats_cit],
 summary_df = pd.DataFrame(data = sum_data)
 
 
-#****************
-#! New data: Missings Inquiry 
-#****************
-
-#!NEW DATA from other source 
-new_data = pd.read_csv("data/new_data/uspatentcitation.tsv", sep = "\t")
-new_data["date"] = new_data["date"].astype(str)
-new_data["year"] = [x[:4] for x in new_data["date"]]
-new_data["year"] = new_data["year"].astype(float)
-new_data_relev = new_data[new_data["year"] < 2001]
-
-owner = grant_grant[["patnum", "owner"]]
-owner = owner.drop_duplicates(keep = "first") #5 duplicates exist
-
-#*info missing on src 
-#check how many of the UNIQUE src patents have no matched owner
-src = pd.DataFrame(grant_cite["src"].drop_duplicates())
-dst = pd.DataFrame(grant_cite["dst"].drop_duplicates())
-src_dst = pd.DataFrame(src["src"].append(dst["dst"]).drop_duplicates()).rename(columns = {0: "pat"})
