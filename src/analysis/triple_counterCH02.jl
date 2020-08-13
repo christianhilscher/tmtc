@@ -72,7 +72,7 @@ end
 function drop_missings(df::DataFrame)
     df_out = dropmissing(df)
     return df_out
-end"
+end
 
 function rm_self_citations(df::DataFrame)
     # Removing those who cite themselves
@@ -121,16 +121,11 @@ end
 
 function count_trs(df::DataFrame, df_citations::DataFrame)
 
-    # First making a directed graph to get the neighbors later
-    n_directed = size(df, 1)
-    G_directed = DiGraph(n_directed)
-    # Filling first graph and make it undirected to get size of undirected one
-    add_to_graph(G_directed, df[!,"firm_src"], df[!,"firm_dst"])
+    # Number of nodes is at most the maxmimum of firm_src or firm_dst
+    n_nodes = maximum([maximum(df[!,"firm_src"]), maximum(df[!,"firm_dst"])])
 
-    # Initializing later graphs
-    n_undirected = size(make_undirected(G_directed), 1)
-    G_undirected = Graph(n_undirected)
-    G_clean = DiGraph(n_directed)
+    G_directed = DiGraph(n_nodes)
+    G_undirected = Graph(n_nodes)
 
     years = sort(unique(df_citations[!, "year"]))
     trs = Array{Int64}(undef, length(years))
@@ -141,10 +136,10 @@ function count_trs(df::DataFrame, df_citations::DataFrame)
 
         df_rel = df[df[!,"year"] .== year, :]
         df_rel_cites = df_citations[df_citations[!,"year"] .== year, :]
-        add_to_graph(G_clean, df_rel[!,"firm_src"], df_rel[!,"firm_dst"])
+        add_to_graph(G_directed, df_rel[!,"firm_src"], df_rel[!,"firm_dst"])
 
         # Keeping only those where the connection goes both ways
-        T_vec = make_undirected(G_clean)
+        T_vec = make_undirected(G_directed)
         for (i, el) in enumerate(T_vec)
             add_edge!(G_undirected, T_vec[i])
         end
@@ -192,9 +187,11 @@ function count_by_fields(df::DataFrame, df_citations::DataFrame, variable::Strin
 
     for (ind, cat) in enumerate(categories)
         println(cat)
+        # Making names for dataframe
         name1 = join(["trs_", cat])
         name2 = join(["cites_", cat])
 
+        # Conditional counting
         x1, x2 = count_trs(df[df[!,variable].==cat,:], df_citations)
         df_hold[!, name1] = x1
         df_hold[!, name2] = x2
@@ -219,6 +216,9 @@ end
 # df_firm_grant = CSV.read("grant_firm.csv")
 # df_grants = CSV.read("grant_grant.csv")
 # df_cite = CSV.read("grant_cite.csv")
+#
+# df_cite = dropmissing(df_cite)
+# sum(df_cite[!, "src"] .> df_cite[!, "dst"])
 #
 # cd(data_path_tmp)
 # df_ipc = CSV.read("ipcs.csv")
@@ -245,8 +245,8 @@ overall = count_trs(df4, df2)
 ## Plotting different measures
 
 # Differentiating by field and technlogy respectively
-technology_results = count_by_fields(df4, df2, "technology")
-field_results = count_by_fields(df4, df2, "field_num")
+technology_results = count_by_fields(df3, df2, "technology")
+field_results = count_by_fields(df3, df2, "field_num")
 
 # Functions for plotting
 function absolute_triples(df::DataFrame)
@@ -313,7 +313,11 @@ rename!(out, "ratio" => "share")
 println(out)
 
 
-
 # How many triples go lost?
 sum(by_field_arr)/overall[1][25]
 sum(technology_results[25, ["trs_discrete", "trs_complex"]])/overall[1][25]
+
+## Playground
+
+df_tmp = df3[df3[!,"field_num"].==13,:]
+abc, def = count_trs(df_tmp, df2)
