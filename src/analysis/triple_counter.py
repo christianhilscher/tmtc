@@ -8,7 +8,11 @@ wd_lc = "/Users/llccf/OneDrive/Dokumente/tmtc/"
 wd_ch = "/Users/christianhilscher/Desktop/tmtc/"
 os.chdir(wd_lc)
 
-#FUNCTIONS
+np.set_printoptions(suppress=True)
+
+#**************
+#! FUNCTIONS
+#**************
 def mutuals(G):
     """
     A function to find the list of nodes that are successors as well as 
@@ -28,47 +32,13 @@ def mutuals(G):
         node_dict[x] = both_dir
     return(node_dict)
 
-#DATA
-#read in net_df csv created in "create_netdf.py" 
-df_full = pd.read_csv("data/df1.csv")
-df_2 = pd.read_csv("data/df2.csv")
-df_3 = pd.read_csv("data/df3.csv")
-df_4 = pd.read_csv("data/df4.csv")
-df_disc = df_4[df_4["technology"] == "discrete"]
-df_com = df_4[df_4["technology"] == "complex"]
-
-#NETWORK
-#initialize empty dictionaries to be filled "name: dict" for each different dataframe
-tri_dict_all = {}
-cit_dict_all = {}
-thicket_dict_all = {}
-#create nodes from combined list of owners_src and owners_dst 
-#drop duplicates of combined list such that each firm only appears once
-owners_src = df_4["firm_src"].tolist()
-owners_dst = df_4["firm_dst"].tolist()
-total = owners_src + owners_dst
-total = list(map(int, total))
-tot_uniq = list(dict.fromkeys(total))
-#add nodes to graph 
-nodes = tot_uniq
-G = nx.DiGraph()
-G.add_nodes_from(nodes)
-#total citations counter
-names = ["total", "discrete", "complex"]
-dfs = [df_4, df_disc, df_com]
-years = np.arange(1976, 2001)
-#loop over names and dataframes
-for name, df in zip(names, dfs): 
+def get_tri(df, years):
     #counter for total references
     tot_ref = 0
     #initialize empty dictionaries to be filled with year: value
     tri_dict = {}
-    citations_dict = {}
+    cit_dict = {}
     thicket_dict = {}
-    #clean graph from all edges 
-    G.remove_edges_from(list(G.edges()))
-    print("edges removed")
-    #now loop over all years
     for year in years:
         """
         this loop: 
@@ -79,13 +49,14 @@ for name, df in zip(names, dfs):
             - counts triangles and fills up initialized dicts
         """
         matched_year = df[df['year'] == year]
+        #matched_year = matched_year[matched_year['firm_src'] != matched_year['firm_dst']]
         citations = len(df_2[df_2["year"] == year])
         tot_ref = tot_ref + citations
-        matched_year = matched_year[matched_year['firm_src'] != matched_year['firm_dst']]
-        #add nodes 
+        #add edges
         edges = list(zip(matched_year['firm_src'], matched_year['firm_dst']))
         edges = list(set([i for i in edges]))
         G.add_edges_from(edges)
+        G.number_of_edges()
         node_dict = mutuals(G)
         #delete nodes that have no nodes connected as mutual successors as predecessors
         for k, v in list(node_dict.items()): 
@@ -97,12 +68,67 @@ for name, df in zip(names, dfs):
         tris_sum = np.sum(tris_arr)/3
         thicket_dict[str(year)] = tris_sum/tot_ref
         tri_dict[str(year)] = tris_sum 
-        citations_dict[str(year)] = tot_ref
-        print(str(year) + ' done')
-    tri_dict_all[name] = tri_dict
-    cit_dict_all[name] = citations_dict 
-    thicket_dict_all[name] = thicket_dict
-    print(name + "done") 
+        cit_dict[str(year)] = tot_ref
+    return(thicket_dict, tri_dict, cit_dict)
+
+def tech_plot(x, total, disc, com, title, ylab, xlab = "Year"):
+    """
+    Function to create plots with total, discrete and complex data. 
+    """
+    plot = figure(plot_wifth = 500, plot_height = 500, x_axis_label = xlab, 
+                y_axis_label = ylab, title = title)
+    plot.line(x, total, color = "blue", legend_label = "total")
+    plot.line(x, disc, color = "red", legend_label = "discrete")
+    plot.line(x, com, color = "orange", legend_label = "complex")
+    plot.legend.location = "top_left"
+    return(plot)
+
+#**************
+#! DATA
+#**************
+df_full = pd.read_csv("data/df1.csv")
+df_2 = pd.read_csv("data/df2.csv")
+df_3 = pd.read_csv("data/df3.csv")
+df_4 = pd.read_csv("data/df4.csv")
+df_disc = df_4[df_4["technology"] == "discrete"]
+df_com = df_4[df_4["technology"] == "complex"]
+
+#**************
+#! NETWORK
+#**************
+
+#! Set up graph
+#initialize empty dictionaries to be filled "name: dict" for each different dataframe
+tri_dict_all = {}
+cit_dict_all = {}
+thicket_dict_all = {}
+#create nodes from combined list of owners_src and owners_dst 
+#drop duplicates of combined list such that each firm only appears once
+owners_src = df_3["firm_src"].tolist()
+owners_dst = df_3["firm_dst"].tolist()
+total = owners_src + owners_dst
+total = list(map(int, total))
+tot_uniq = list(dict.fromkeys(total))
+#set up graph
+G = nx.DiGraph()
+#add nodes to graph 
+nodes = tot_uniq
+G.add_nodes_from(nodes)
+
+#! Total, discrete and complex technology triangles
+#set up names for dictionaries
+names = ["total", "discrete", "complex"]
+#df to loop over
+dfs = [df_4, df_disc, df_com]
+#years of interest
+years = np.arange(1976, 2001)
+
+#loop over names and dataframes
+for name, df in zip(names, dfs): 
+    #clean graph from all edges 
+    G.remove_edges_from(list(G.edges()))
+    thicket_dict_all[name], tri_dict_all[name], cit_dict_all[name] = get_tri(df, years)
+    print(name + " done")
 
 #thickets
 thickets_total = thicket_dict_all["total"]
@@ -116,13 +142,35 @@ tri_com = tri_dict_all["complex"]
 cit_total = cit_dict_all["total"]
 cit_list = np.array(list(cit_total.values()))
 
-#! Analysis by ipc 
-ipcs = {}
-for x, y, z in zip(df_2["firm_dst"], df_2["firm_src"], df_2["field_num"]):
-    ipcs[(x, y)] = z
-ipcs = 
+#! Triangles by ipc
+thickets_ipc = {} 
+tri_ipc = {}
+cit_ipc = {}
+#remove all edges from G again 
+G.remove_edges_from(list(G.edges()))
+#get field and field_num pair
+fields = [(x, y) for x,y in zip(df_3["field_num"], df_3["field"])]
 
-#!Plot 
+fields = list(dict.fromkeys(fields))
+field_nums = [x[0] for x in fields]
+field_names = [x[1] for x in fields]
+fields_df = pd.DataFrame({"field": field_names, "field_num": field_nums})
+fields_df = fields_df.sort_values(by = "field_num", axis = 0).reset_index().drop("index", axis = 1)
+
+for field in fields:
+    G.remove_edges_from(list(G.edges()))
+    df = df_3[df_3["field_num"] == 13]
+    name = "Medical technology"
+    thickets_ipc[name], tri_ipc[name], cit_ipc[name] = get_tri(df, years)
+    print(name + " done")
+
+df_tri_ipc = pd.DataFrame.from_dict(tri_ipc)
+
+
+
+#**************
+#! PLOTS
+#**************
 from bokeh.plotting import figure, output_notebook, show 
 from bokeh.io import export_png
 from bokeh.models import NumeralTickFormatter
@@ -130,31 +178,30 @@ from bokeh.models import NumeralTickFormatter
 output_notebook()
 
 #*figure on absolute number of triples
-p_abstrip = figure(plot_width = 500, plot_height = 500, 
-        x_axis_label = 'Year', y_axis_label = "Absolute number of triples", 
-        title = "Total number of triples")
-p_abstrip.line(years, list(tri_total.values()), color = "blue", legend_label = "total")
-p_abstrip.line(years, list(tri_disc.values()), color = "red", legend_label = "discrete")
-p_abstrip.line(years, list(tri_com.values()), color = "orange", legend_label = "complex")
-p_abstrip.legend.location = "top_left"
+p_abstrip = tech_plot(years, list(tri_total.values()), list(tri_disc.values()), list(tri_com.values()), 
+                    "Total number of triples", "Absolute number of triples")
 #p.yaxis.formatter = NumeralTickFormatter(format = "0000")
 show(p_abstrip)
 #export_png(p_abstrip, filename = "output/abs_triples_tech.png")
 
 #*figure on share of triples relative to total citations
-p_share = figure(plot_width = 500, plot_height = 500, 
-        x_axis_label = 'Year', y_axis_label = "Percentage", 
-        title = "Share of triples relative to all citations")
-total_share = np.array(list(tri_total.values()))/cit_list
-disc_share = np.array(list(tri_disc.values()))/cit_list
-com_share = np.array(list(tri_com.values()))/cit_list
-p_share.line(years, total_share, color = "blue", legend_label = "total")
-p_share.line(years, disc_share, color = "red", legend_label = "discrete")
-p_share.line(years, com_share, color = "orange", legend_label = "complex")
-p_share.legend.location = "top_left"
+p_share = tech_plot(years, total_share, disc_share, com_share, 
+                    "Share of triples realtive to all citations", "Share of triples")
 show(p_share)
 #export_png(p_share, filename = "output/shares_triples_totalcit")
 
+#* shares by ipc 
+ticks = [(x, y) for x, y in zip(df_2["field_num"], df_2["field"])]
+ticks = list(dict.fromkeys(ticks))
+ticks = dict(ticks)
+
+p_ipc = figure(plot_width = 500, plot_height = 500, x_axis_label = "Technology Field", 
+                y_axis_label = "Percentage share", title = "IPC Shares")
+p_ipc.vbar(x = field_nums, top = ipc_shares, width = 0.9)
+p.xaxis.ticker = list(ticks.keys())
+p_ipc.xaxis.major_label_overrides = ticks
+p_ipc.xaxis.major_label_orientation = 0.8
+show(p_ipc)
 
 
 
@@ -211,3 +258,4 @@ p.xaxis.major_label_overrides = ticks
 p.xaxis.major_label_orientation = 0.8
 show(p)
 export_png(p, filename = "Field_Counts_vert.png")
+

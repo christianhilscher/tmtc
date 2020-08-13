@@ -6,6 +6,9 @@ import os
 wd_lc = "/Users/llccf/OneDrive/Dokumente/tmtc/"
 os.chdir(wd_lc)
 
+def get_first(number, first = 4): 
+    first = float(str(number)[:first])
+    return(first)
 
 #!#####################
 #! Missings inquiry 
@@ -14,6 +17,7 @@ os.chdir(wd_lc)
 #*########
 #! Data 
 #*########
+"""
 #number of obs.: 269800
 #ids matched to single firm_num
 firm_to00 = pd.read_csv("data/tables_to2000/firm_to00.csv")
@@ -41,7 +45,9 @@ name = name_to89.append(name_to00)
 grant_match_to89 = pd.read_csv("data/tables_to2000/grant_match_to89.csv")
 grant_match_to00 = pd.read_csv("data/tables_to2000/grant_match_to00.csv")
 grant_match = grant_match_to89.append(grant_match_to00)
+"""
 
+#below of most interest
 #number of obs.: 1986871
 grant_firm_to89 = pd.read_csv("data/tables_to2000/grant_firm_to89.csv")
 grant_firm_to00 = pd.read_csv("data/tables_to2000/grant_firm_to00.csv")
@@ -56,6 +62,8 @@ grant_grant = grant_grant_to89.append(grant_grant_to00)
 grant_cite_to89 = pd.read_csv("data/tables_to2000/grant_cite_to89.csv")
 grant_cite_to00 = pd.read_csv("data/tables_to2000/grant_cite_to00.csv")
 grant_cite = grant_cite_to89.append(grant_cite_to00)
+
+
 
 #*########
 #! Number of patents
@@ -107,6 +115,7 @@ owner = owner.drop_duplicates(keep = "first") #5 duplicates exist
 #check how many of the UNIQUE src patents have no matched owner
 src = pd.DataFrame(grant_cite["src"].drop_duplicates())
 src_owner = src.merge(owner, left_on = "src", right_on = "patnum", how = "outer")
+
 """
 -> use outer join such that I keep 
     - pats that are not src but in main 
@@ -228,6 +237,12 @@ Summary:
 """
 
 #*########
+#! Missings by year
+#*########
+owner_year = grant_grant[["owner", "patnum", "pubdate"]]
+owner_year["year"] = owner_year["pubdate"].apply(get_first)
+
+#*########
 #! Visualizations
 #*########
 from bokeh.io import output_notebook, show
@@ -261,3 +276,24 @@ sum_data = {"Patents": [no_pats_cite, no_pats_cited, no_pats_cit],
                 "Missings DST": [dst_1_miss, dst_2_miss, dst_3_miss],
                 "Missing owners shares": [share_6 * 100, share_7 * 100, share_8 * 100]}
 summary_df = pd.DataFrame(data = sum_data)
+
+
+#****************
+#! New data: Missings Inquiry 
+#****************
+
+#!NEW DATA from other source 
+new_data = pd.read_csv("data/new_data/uspatentcitation.tsv", sep = "\t")
+new_data["date"] = new_data["date"].astype(str)
+new_data["year"] = [x[:4] for x in new_data["date"]]
+new_data["year"] = new_data["year"].astype(float)
+new_data_relev = new_data[new_data["year"] < 2001]
+
+owner = grant_grant[["patnum", "owner"]]
+owner = owner.drop_duplicates(keep = "first") #5 duplicates exist
+
+#*info missing on src 
+#check how many of the UNIQUE src patents have no matched owner
+src = pd.DataFrame(grant_cite["src"].drop_duplicates())
+dst = pd.DataFrame(grant_cite["dst"].drop_duplicates())
+src_dst = pd.DataFrame(src["src"].append(dst["dst"]).drop_duplicates()).rename(columns = {0: "pat"})
