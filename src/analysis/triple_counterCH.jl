@@ -11,7 +11,11 @@ data_path_tmp = joinpath(wd, "data/tmp/")
 graph_path = joinpath(wd, "output/tmp/")
 
 ###############################################################################
-function new_ids(df_firm::DataFrame, var::String)
+"""
+Recodes the firm_id variable from 1 to n. That's because the graph package only takes vertices from 1 to n and not strings or anything similar
+"""
+function make_ids(df_firm::DataFrame,
+                var::String)
 
     df_firm = rename(df_firm, var => "tobechanged")
     df_new = df_firm[!, ["tobechanged"]]
@@ -26,14 +30,17 @@ function new_ids(df_firm::DataFrame, var::String)
     return df_new
 end
 
+"""
+Takes the raw data files and merges them into somthing useable
+"""
 function make_df(raw_cites::DataFrame,
-    raw_grants::DataFrame,
-    raw_firms::DataFrame)
+                raw_grants::DataFrame,
+                raw_firms::DataFrame)
     """
     Takes the raw data files and merges them into somthing useable
     """
 
-    edit_firms = new_ids(raw_firms, "firm_num")
+    edit_firms = make_ids(raw_firms, "firm_num")
 
     # Getting the owners of the patents
     owner_source = leftjoin(raw_cites, edit_firms, on = :src => :patnum)
@@ -43,22 +50,24 @@ function make_df(raw_cites::DataFrame,
     dst_source = leftjoin(owner_source, edit_firms, on = :dst => :patnum)
     dst_source = rename(dst_source, "firm_num" => "firm_dst")
 
-    dst_source = leftjoin(dst_source, raw_grants[:,["pubdate", "patnum", "ipc", "ipcver"]], on = :src => :patnum)
+    dst_source = leftjoin(dst_source, raw_grants[:,[:pubdate, :patnum, :ipc, :ipcver]], on = :src => :patnum)
+    dst_source = rename(dst_source, "src" => "patnum")
 
     # Adding year from pubdate
     year_list = first.(string.(dst_source[!, "pubdate"]), 4)
     dst_source[!, "year"] = year_list
 
     # Narrowing it down
-    df_out = dst_source[!, ["year", "firm_dst", "firm_src", "ipc", "ipcver"]]
+    df_out = dst_source[!, [:year, :firm_dst, :firm_src, :ipc, :ipcver, :patnum]]
 
     return df_out
 end
 
-function add_ipc(df::DataFrame, df_ipc::DataFrame)
-    """
-    Adding the ipc classification to the main dataframe
-    """
+"""
+Adding the ipc classification to the main dataframe
+"""
+function add_ipc(df::DataFrame,
+                df_ipc::DataFrame)
 
     df_ipc = unique(df_ipc, "ipc_code")
 
@@ -67,6 +76,25 @@ function add_ipc(df::DataFrame, df_ipc::DataFrame)
     df_ipc = leftjoin(df, unique(df_ipc, "ipc_code"), on = :ipc_code)
 
     return df_ipc
+end
+
+"""
+Adding NBER classification
+"""
+function addnber(df::DataFrame,
+                df_nber::DataFrame,
+                df_nber_cat::DataFrame,
+                df_nber_subcat::DataFrame)
+
+    # First merging the title categories
+    df_cats = leftjoin(df_nber[!,["patent_id", "category_id", "subcategory_id"]], df_nber_cat, on = :category_id => :id)
+    df_cats = rename(df_cats, "title" => "category_title")
+
+    df_cats = leftjoin(df_cats, df_nber_subcat, on = :subcategory_id => :id)
+    df_cats = rename(df_cats, "title" => "subcategory_title")
+
+    df = leftjoin(df, df_cats, on = :patnum => :patent_id)
+    return df
 end
 
 function drop_missings(df::DataFrame)
@@ -87,10 +115,10 @@ function make_unique(df::DataFrame)
     return unique(df, "srcdst")
 end
 
+"""
+Takes a graph object as input and only returns those neighbors who cite both ways
+"""
 function make_undirected(graph::SimpleDiGraph)
-    """
-    Takes a graph object as input and only returns those neighbors who cite both ways
-    """
 
     boths = Array{Tuple{Int64, Int64}}(undef, 0)
     # Loop over every vertice
@@ -112,14 +140,15 @@ function make_undirected(graph::SimpleDiGraph)
     return boths
 end
 
-function add_to_graph(graph::SimpleDiGraph, srcs, dsts)
+function addtograph!(graph::SimpleDiGraph, srcs, dsts)
 
     for (i, el) in enumerate(srcs)
         add_edge!(graph, srcs[i], dsts[i])
     end
 end
 
-function count_trs(df::DataFrame, df_citations::DataFrame)
+
+function count_triangles(df::DataFrame, df_citations::DataFrame)
 
     # Number of nodes is at most the maxmimum of firm_src or firm_dst
     n_nodes = maximum([maximum(df[!,"firm_src"]), maximum(df[!,"firm_dst"])])
@@ -136,7 +165,7 @@ function count_trs(df::DataFrame, df_citations::DataFrame)
 
         df_rel = df[df[!,"year"] .== year, :]
         df_rel_cites = df_citations[df_citations[!,"year"] .== year, :]
-        add_to_graph(G_directed, df_rel[!,"firm_src"], df_rel[!,"firm_dst"])
+        addtograph!(G_directed, df_rel[!,"firm_src"], df_rel[!,"firm_dst"])
 
         # Keeping only those where the connection goes both ways
         T_vec = make_undirected(G_directed)
@@ -147,7 +176,7 @@ function count_trs(df::DataFrame, df_citations::DataFrame)
         # Counting triangles in that graph only containing both directions
         tmp = triangles(G_undirected)
         trs[ind] = sum(tmp)/3
-        cts[ind] = size(df_rel_cites, 1)
+        cts[ind] = length(unique(df_rel_cites[!, :patnum]))
     end
 
     # Since the triangles add up over the years also use the cumulative sum for citations
@@ -155,12 +184,12 @@ function count_trs(df::DataFrame, df_citations::DataFrame)
 end
 
 function plot_ratios(df::DataFrame,
-    df_cites::DataFrame,
-    title::String,
-    name::String)
+                    df_cites::DataFrame,
+                    title::String,
+                    name::String)
 
     xs = sort(unique(df[!,"year"]))
-    triangles, cites = count_trs(df, df_cites)
+    triangles, cites = count_triangles(df, df_cites)
 
     ratio = triangles./cites
     plot(xs, ratio, title=title, label = "ratio")
@@ -175,11 +204,13 @@ function linescatter1(df::DataFrame)
     plot([trace1, trace2])
 end
 
-function count_by_fields(df::DataFrame, df_citations::DataFrame, variable::String)
+"""
+Counting triangles but differentiating by some variable first.
+"""
+function count_by_fields(df::DataFrame,
+                        df_citations::DataFrame,
+                        variable::String)
 
-    """
-    Counting triangles but differentiating by some variable first.
-    """
     categories = sort(unique(df[!, variable]))
 
     xs = sort(unique(df_citations[!,"year"]))
@@ -192,7 +223,7 @@ function count_by_fields(df::DataFrame, df_citations::DataFrame, variable::Strin
         name2 = join(["cites_", cat])
 
         # Conditional counting
-        x1, x2 = count_trs(df[df[!,variable].==cat,:], df_citations)
+        x1, x2 = count_triangles(df[df[!,variable].==cat,:], df_citations)
         df_hold[!, name1] = x1
         df_hold[!, name2] = x2
 
@@ -200,7 +231,7 @@ function count_by_fields(df::DataFrame, df_citations::DataFrame, variable::Strin
     return df_hold
 end
 
-function un_cumulate(arr::Vector{Int64})
+function uncumulate(arr::Vector{Int64})
     n = length(arr)
     out = zeros(n)
 
@@ -224,8 +255,13 @@ end
 # df_ipc = CSV.read("ipcs.csv")
 # cd(data_path_full)
 #
+# df_nber = CSV.read("nber.tsv")
+# df_nber_cat = CSV.read("nber_category.tsv")
+# df_nber_subcat = CSV.read("nber_subcategory.tsv")
+#
 # df1 = make_df(df_cite, df_grants, df_firm_grant)
 # df1 = add_ipc(df1, df_ipc)
+# df1 = addnber(df1, df_nber, df_nber_cat, df_nber_subcat)
 # df2 = drop_missings(df1)
 # df3 = rm_self_citations(df2)
 # df4 = make_unique(df3)
@@ -240,13 +276,13 @@ df4 = CSV.read("df4.csv")
 ## Calculating and plotting
 # plot_ratios(df4, df1, "Triangles/Total Citations", "1")
 
-overall = count_trs(df4, df2)
+overall = count_triangles(df4, df2)
 
 ## Plotting different measures
 
 # Differentiating by field and technlogy respectively
 technology_results = count_by_fields(df3, df2, "technology")
-field_results = count_by_fields(df3, df2, "field_num")
+field_results = count_by_fields(df3, df2, "subcategory_id")
 
 # Functions for plotting
 function absolute_triples(df::DataFrame)
@@ -262,8 +298,8 @@ end
 
 function yoy_triples(df::DataFrame)
     year_list = sort(unique(df[!, "year"]))
-    yoy_discrete = un_cumulate(df[!,"trs_discrete"])
-    yoy_complex = un_cumulate(df[!,"trs_complex"])
+    yoy_discrete = uncumulate(df[!,"trs_discrete"])
+    yoy_complex = uncumulate(df[!,"trs_complex"])
 
     trace1 = bar(;x=year_list, y=yoy_discrete, name="discrete triples", opacity=0.5)
 
@@ -283,7 +319,7 @@ function trs_over_cites(df::DataFrame)
 
     trace2 = scatter(df, x = :year, y = y2, mode="lines", name="complex triples")
 
-    layout = Layout(;title="Triples relative to total citations")
+    layout = Layout(;title="Triples relative to total patents")
     data = [trace1, trace2]
     plot(data, layout)
 end
@@ -319,5 +355,19 @@ sum(technology_results[25, ["trs_discrete", "trs_complex"]])/overall[1][25]
 
 ## Playground
 
-df_tmp = df3[df3[!,"field_num"].==13,:]
-abc, def = count_trs(df_tmp, df2)
+# Analysis by NBER subcategory instead of IPC
+
+# by_field = field_results[size(field_results,1),collect(2:2:size(field_results,2))]
+# by_field_arr = convert(Array{Int64}, by_field)
+#
+# table_df = DataFrame(subcategory_id = sort(unique((df3[!, "subcategory_id"]))))
+# table_df[!, "triples"] = by_field_arr
+# table_df[!, "ratio"] = table_df[!,"triples"]./sum(by_field_arr)
+#
+# df_edit = unique(df4, "subcategory_id")
+#
+# out = leftjoin(table_df, df_edit[!,["subcategory_id", "subcategory_title"]], on = :subcategory_id)
+# out = out[[:subcategory_id, :subcategory_title, :triples, :ratio]]
+# sort!(out, :subcategory_id)
+# rename!(out, "ratio" => "share")
+# println(out)
