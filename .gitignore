@@ -133,3 +133,11 @@ dmypy.json
 /output
 /tmp
 /src/get_data/data
+.vscode/
+<<<<<<< HEAD
+/
+=======
+.DS_Store
+/src/get_data/.DS_Store
+src/get_data/.Rhistory
+>>>>>>> 34faf9f9cb6eb06b342fe6c7a6b48b7e44e64d06
