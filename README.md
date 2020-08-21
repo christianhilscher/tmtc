@@ -1,4 +1,4 @@
-#tmtc
+# tmtc
 
 Project for analysing the effect of patent thickets. Data is taken from the UPSTO and for now includes all patents in the US from 1976-2000. 
 
