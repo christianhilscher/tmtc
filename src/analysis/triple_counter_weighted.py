@@ -7,6 +7,8 @@ from bokeh.plotting import figure, show, output_notebook
 from itertools import chain
 import itertools
 import time
+import collections
+
 #set up path
 wd_lc = "/Users/llccf/OneDrive/Dokumente/tmtc/"
 os.chdir(wd_lc)
@@ -14,6 +16,85 @@ os.chdir(wd_lc)
 ###########################
 #FUNCTIONS
 ###########################
+#minifunctions for MultiDiGraph
+def get_nodes(df, nodescol = "nodes"):
+    """
+    Get nodes from df containing nodes info.
+
+    *df = df with info on nodes
+    *nodescol = column containing nodes
+    """
+    nodes = df[nodes].tolist()
+    return(nodes)
+
+def get_edges(df, edgescol = "srcdst"):
+    """
+    Get edges from df containing info on edges. Necessary that df contains
+    includes col with edges as tuple and as single columns.
+
+    *df = df containing info on edges
+    *edgescol = column containing edges as tuples
+    """
+    df_3["count"] = df_3.groupby([edgescol]).cumcount() + 1
+    df_3["edges"] = [(u, v, k) for u, v, k in zip(df_3["firm_src"], df_3["firm_dst"], df_3["count"])]
+    edges = df_3["edges"].tolist()
+    return(edges)
+
+def get_edgeattrs(df, *args):
+    """
+    Get attributes of edges from df containing info on edges. Some are pre-specified,
+    more can be added using *args.
+
+    *df = df containing info on edges
+    **args = further attributes
+    """
+    df_edges = df.set_index("edges")
+    df_edges = df_edges[["field_num", "sector", "technology", "year", "weights", "count", *args]]
+    attr_edges = df_edges.to_dict(orient = "index")
+    return(attr_edges)
+
+def get_nodeattrs(df, *args):
+    """
+    Get attributes of nodes from df containing info on nodes. Some are pre-soecified,
+    more can be added using *args.
+
+    *df = df containing info on nodes
+    **args = further attributes
+    """
+    df_nodes = df.set_index("nodes")
+    df_nodes = df_nodes[["year", "field_num", "sector", "technology", *args]]
+    attr_nodes = df_nodes.to_dict(orient = "index")
+    return(attr_nodes)
+
+def setup_G(df_edges, df_nodes):
+    """
+    Sets up a NetworkX MultiDIGraph object, with nodes from df_nodes
+    and edges from df_edges. Attributes are added for respective element using
+    info contained in respective df.
+
+    df_edges = df containing info on edges
+    df_nodes = df containing info on nodes.
+    """
+    nodes = get_nodes(df_nodes)
+    print("got nodes")
+    node_attrs = get_edgeattrs(df_nodes)
+    print("got node attributes")
+    edges = get_edges(df_edges)
+    print("got edges")
+    edge_attrs = get_edgeattrs(df_edges)
+    print("got edge attributes")
+    G = nx.MultiDiGraph()
+    G.add_nodes_from(nodes)
+    print("nodes added")
+    nx.set_node_attributes(G, node_attrs)
+    print("node attributes added")
+    G.add_edges_from(edges)
+    print("edges added")
+    nx.set_edge_attributes(G, edge_attrs)
+    print("edges attributes added")
+    return(G)
+
+#NEED TO ADJUST TO MULTIGRAPH
 def mutuals(G, weights = False):
     """
     A function to find the list of nodes that are successors as well as
@@ -45,10 +126,12 @@ def mutuals(G, weights = False):
             node_dict[i] = both_dir
         return(node_dict)
 
-def gettris(G):
+def gettris_di(G):
     """
-    Add description - mostly based on _directed_triangles_and_degree_iter
-    Returns a list of lists where inner level contains nodes that form a triangle
+    Gets a list of lists containing triangles existing in NetworkX DiGraph object.
+    Mostly based on _directed_triangles_and_degree_iter from NetworkX.
+
+    *G = NetworkX.DiGraph()
     """
     tridict = {}
     alltris = []
@@ -72,8 +155,47 @@ def gettris(G):
     k = alltris
     k.sort()
     fin = list(k for k,_ in itertools.groupby(k))
+    return(fin)
 
-    return(alltris)
+def gettris(G):
+    """
+    Gets a list of lists of triangles existing in NetworkX Graph object.
+
+    *G = NetworkX.Graph()
+    """
+    alltris = []
+    tridict = {}
+    if nodes is None:
+        nodes_nbrs = G.adj.items()
+    else:
+        nodes_nbrs = ((n, G[n]) for n in G.nbunch_iter(nodes))
+    for v, v_nbrs in nodes_nbrs:
+        vs = set(v_nbrs) - {v}
+        for j in vs:
+            jnbrs = set(G.adj[j]) - {j}
+            both = list(jnbrs.intersection(vs))
+            both = list(dict.fromkeys(both))
+            tridict[(v, j)] = both
+    for j, x in tridict.items():
+        for i in x:
+            alltris.append(sorted((j[0], j[1], i)))
+    k = alltris
+    k.sort()
+    fin = list(k for k,_ in itertools.groupby(k))
+    return(fin)
+
+def getthicket(G, tris, weight = "weight"):
+    """
+    Follow-up funtion to gettris. Use list of triangles to get weights and add up
+    """
+    weight_sums = {}
+    for x in tris:
+        w1 = G[x[0]][x[1]][weight]
+        w2 = G[x[0]][x[2]][weight]
+        w3 = G[x[1]][x[2]][weight]
+        weight_sums[(x[0], x[1], x[2])] = np.sum((w1, w2, w3))
+    thicket = np.sum(list(weight_sums.values()))
+    return(weight_sums, thicket)
 
 def ditriangles(G, nodes = None):
     """
@@ -84,21 +206,13 @@ def ditriangles(G, nodes = None):
         return next(_directed_triangles_and_degree_iter(G, nodes))[3] // 2
     return {n: t // 2 for n, td, rd, t in _directed_triangles_and_degree_iter(G, nodes)}
 
-def wditriangles(G, nodes = None):
-    """
-    Count triangles that have a weight.
-    """
-    if nodes in G:
-        return next(_directed_weighted_triangles_and_degree_iter(G, nodes))[3] // 2
-    return {n: t // 2 for n, td, rd, t in _directed_weighted_triangles_and_degree_iter(G, nodes)}
-
 """
 Notes:
     - when first doing filtering using mutuals(), # of edges between directed and undirected graph
     differs by factor of 2 since all edges appear basically twice in directed graph
     - that is why we need to additionally divide the number of total triangles by 2 (additionally to
     the dividing by 2 in the fuction itself due to double counting and the division by three because of the
-    triplce counting when using all nodes)
+    triple counting when using all nodes)
     - additionally, when looking at source code from _directed_triangles_and_degree_iter we see that for each triangle
     4 counters are added since the by mutual() filtered graph fulfills all the conditions anytime
     - hence, in total need to divide by 24 to get same number of triangles as in undirected graph
@@ -116,13 +230,18 @@ df_4 = pd.read_csv("data/df4.csv")
 #GRAPH
 ###########################
 
+#changing the setup of the analysis:
+#instead of filtering the data and tehn creating a graph, I will
+#create a graph with all edges and include metadata for filtering
+
+#create dummy weights
+df_3["weights"] = np.random.rand(len(df_3))
+
 #set up nodes
 nodes = df_3["firm_dst"].append(df_3["firm_src"]).drop_duplicates(keep = "first")
 nodes = list(nodes)
 #set up graph environment
-G = nx.DiGraph()
-#add nodes
-G.add_nodes_from(nodes)
+G = setup_G(df_3)
 
 #add all edges
 df = df_3
@@ -166,7 +285,8 @@ Gw.add_nodes_from(nodes)
 #add all edges
 df = df_3
 df["weights"] = np.random.rand(len(df))
-years = np.arange(1990, 1995)
+years = np.arange(1976, 2001)
+thickets = {}
 for year in years:
     """
     this loop:
@@ -176,6 +296,7 @@ for year in years:
         - creates a new graph only with nodes that have mutually directed edges
         - counts triangles and fills up initialized dicts
     """
+    year = 1976
     matched_year = df[df['year'] == year]
     #matched_year = matched_year[matched_year['firm_src'] != matched_year['firm_dst']]
     citations = len(df_2[df_2["year"] == year])
@@ -185,61 +306,12 @@ for year in years:
     #since the duplicates are also relying on the weight
     edges = list(set([i for i in edges]))
     Gw.add_weighted_edges_from(edges)
-    print(year)
-
-node_dict_w, weights_dict = mutuals(Gw, weights = True)
-Gw_di = nx.DiGraph(node_dict_w)
-nx.set_edge_attributes(Gw_di, weights_dict, name = "weight")
-list(Gw_di.edges(data = True))
-
-test = wditriangles(Gw)
-
-def _directed_weighted_triangles_and_degree_iter(G, nodes=None, weight = 'weight'):
-    """ Return an iterator of
-    (node, total_degree, reciprocal_degree, directed_weighted_triangles).
-
-    Used for directed weighted clustering.
-
-    """
-    if weight is None or G.number_of_edges() == 0:
-        max_weight = 1
+    node_dict_w, weights_dict = mutuals(Gw, weights = True)
+    Gw_sub = nx.Graph(node_dict_w)
+    if len(list(Gw_sub.edges())) == 0:
+        print(year)
     else:
-        max_weight = max(d.get(weight, 1) for u, v, d in G.edges(data=True))
-
-    nodes_nbrs = ((n, G._pred[n], G._succ[n]) for n in G.nbunch_iter(nodes))
-
-    def wt(u, v):
-        return G[u][v].get(weight, 1) / max_weight
-
-    for i, preds, succs in nodes_nbrs:
-        ipreds = set(preds) - {i}
-        isuccs = set(succs) - {i}
-
-        directed_triangles = 0
-        for j in ipreds:
-            jpreds = set(G._pred[j]) - {j}
-            jsuccs = set(G._succ[j]) - {j}
-            directed_triangles += sum((wt(j, i) * wt(k, i) * wt(k, j))**(1 / 3)
-                                      for k in ipreds & jpreds)
-            directed_triangles += sum((wt(j, i) * wt(k, i) * wt(j, k))**(1 / 3)
-                                      for k in ipreds & jsuccs)
-            directed_triangles += sum((wt(j, i) * wt(i, k) * wt(k, j))**(1 / 3)
-                                      for k in isuccs & jpreds)
-            directed_triangles += sum((wt(j, i) * wt(i, k) * wt(j, k))**(1 / 3)
-                                      for k in isuccs & jsuccs)
-
-        for j in isuccs:
-            jpreds = set(G._pred[j]) - {j}
-            jsuccs = set(G._succ[j]) - {j}
-            directed_triangles += sum((wt(i, j) * wt(k, i) * wt(k, j))**(1 / 3)
-                                      for k in ipreds & jpreds)
-            directed_triangles += sum((wt(i, j) * wt(k, i) * wt(j, k))**(1 / 3)
-                                      for k in ipreds & jsuccs)
-            directed_triangles += sum((wt(i, j) * wt(i, k) * wt(k, j))**(1 / 3)
-                                      for k in isuccs & jpreds)
-            directed_triangles += sum((wt(i, j) * wt(i, k) * wt(j, k))**(1 / 3)
-                                      for k in isuccs & jsuccs)
-
-        dtotal = len(ipreds) + len(isuccs)
-        dbidirectional = len(ipreds & isuccs)
-        yield (i, dtotal, dbidirectional, directed_triangles)
+        Gw_sub = nx.set_edge_attributes(Gw_sub, weights_dict, name = "weight")
+        tris = gettris(Gw_sub)
+        thickets[year] = getthicket(Gw_di, tris)[1]
+        print(year)
