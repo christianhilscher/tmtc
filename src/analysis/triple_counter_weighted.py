@@ -24,7 +24,7 @@ def get_nodes(df, nodescol = "nodes"):
     *df = df with info on nodes
     *nodescol = column containing nodes
     """
-    nodes = df[nodes].tolist()
+    nodes = df[nodescol].tolist()
     return(nodes)
 
 def get_edges(df, edgescol = "srcdst"):
@@ -35,9 +35,9 @@ def get_edges(df, edgescol = "srcdst"):
     *df = df containing info on edges
     *edgescol = column containing edges as tuples
     """
-    df_3["count"] = df_3.groupby([edgescol]).cumcount() + 1
-    df_3["edges"] = [(u, v, k) for u, v, k in zip(df_3["firm_src"], df_3["firm_dst"], df_3["count"])]
-    edges = df_3["edges"].tolist()
+    df["count"] = df.groupby([edgescol]).cumcount() + 1
+    df["edges"] = [(u, v, k) for u, v, k in zip(df_3["firm_src"], df_3["firm_dst"], df_3["count"])]
+    edges = df["edges"].tolist()
     return(edges)
 
 def get_edgeattrs(df, *args):
@@ -53,22 +53,23 @@ def get_edgeattrs(df, *args):
     attr_edges = df_edges.to_dict(orient = "index")
     return(attr_edges)
 
-def get_nodeattrs(df, *args):
+def get_nodeattrs(df, nodescol = "nodes", *args):
     """
     Get attributes of nodes from df containing info on nodes. Some are pre-soecified,
     more can be added using *args.
 
     *df = df containing info on nodes
+    *nodescol = column containing nodes
     **args = further attributes
     """
-    df_nodes = df.set_index("nodes")
+    df_nodes = df.set_index(nodescol)
     df_nodes = df_nodes[["year", "field_num", "sector", "technology", *args]]
     attr_nodes = df_nodes.to_dict(orient = "index")
     return(attr_nodes)
 
 def setup_G(df_edges, df_nodes):
     """
-    Sets up a NetworkX MultiDIGraph object, with nodes from df_nodes
+    Sets up a NetworkX.MultiDiGraph(), with nodes from df_nodes
     and edges from df_edges. Attributes are added for respective element using
     info contained in respective df.
 
@@ -77,28 +78,29 @@ def setup_G(df_edges, df_nodes):
     """
     nodes = get_nodes(df_nodes)
     print("got nodes")
-    node_attrs = get_edgeattrs(df_nodes)
-    print("got node attributes")
+    #node_attrs = get_nodeattrs(df_nodes)
+    #print("got node attributes")
     edges = get_edges(df_edges)
+    df_edges["edges"] = edges
     print("got edges")
     edge_attrs = get_edgeattrs(df_edges)
     print("got edge attributes")
     G = nx.MultiDiGraph()
     G.add_nodes_from(nodes)
     print("nodes added")
-    nx.set_node_attributes(G, node_attrs)
-    print("node attributes added")
+    #nx.set_node_attributes(G, node_attrs)
+    #print("node attributes added")
     G.add_edges_from(edges)
     print("edges added")
     nx.set_edge_attributes(G, edge_attrs)
     print("edges attributes added")
     return(G)
 
-#NEED TO ADJUST TO MULTIGRAPH
-def mutuals(G, weights = False):
+#below not usable for multigraph so far
+def mutuals(G, weights = True):
     """
     A function to find the list of nodes that are successors as well as
-    predecessors of node n in a directed networkx graph G.
+    predecessors of node n in a NetworkX.DiGraph().
     This is done for all nodes and dictionary returned is structured as
     {node: list of nodes that are predec and succec, node2: ...}
     G: directed Networkx Graph
@@ -128,7 +130,7 @@ def mutuals(G, weights = False):
 
 def gettris_di(G):
     """
-    Gets a list of lists containing triangles existing in NetworkX DiGraph object.
+    Gets a list of lists containing triangles existing in NetworkX.DiGraph().
     Mostly based on _directed_triangles_and_degree_iter from NetworkX.
 
     *G = NetworkX.DiGraph()
@@ -159,7 +161,7 @@ def gettris_di(G):
 
 def gettris(G):
     """
-    Gets a list of lists of triangles existing in NetworkX Graph object.
+    Gets a list of lists of triangles existing in NetworkX.Graph().
 
     *G = NetworkX.Graph()
     """
@@ -226,6 +228,8 @@ df_2 = pd.read_csv("data/df2.csv")
 df_3 = pd.read_csv("data/df3.csv")
 df_4 = pd.read_csv("data/df4.csv")
 
+grant_grant = pd.read_csv("data/grant_grant.csv")
+type(grant_grant.loc[0, "patnum"])
 ###########################
 #GRAPH
 ###########################
@@ -237,12 +241,8 @@ df_4 = pd.read_csv("data/df4.csv")
 #create dummy weights
 df_3["weights"] = np.random.rand(len(df_3))
 
-#set up nodes
-nodes = df_3["firm_dst"].append(df_3["firm_src"]).drop_duplicates(keep = "first")
-nodes = list(nodes)
 #set up graph environment
-G = setup_G(df_3)
-
+G = setup_G(df_3, nodes)
 #add all edges
 df = df_3
 years = np.arange(1976, 2001)
