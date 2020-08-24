@@ -154,10 +154,10 @@ cd(data_path_full)
 df_nber = CSV.read("nber.tsv")
 df_nber_cat = CSV.read("nber_category.tsv")
 df_nber_subcat = CSV.read("nber_subcategory.tsv")
-#
+
 df1 = make_df(df_cite, df_grants, df_firm_grant)
-df11 = unique_patnum(df1)
-df12 = add_ipc(df11, df_ipc)
+# df11 = unique_patnum(df1)
+df12 = add_ipc(df1, df_ipc)
 df13 = addnber(df12, df_nber, df_nber_cat, df_nber_subcat)
 df2 = drop_missings(df13)
 df3 = rm_self_citations(df2)
