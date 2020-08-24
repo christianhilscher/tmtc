@@ -2,7 +2,7 @@ using Pkg
 using LightGraphs, MetaGraphs, SimpleWeightedGraphs
 using CSV, DataFrames
 using PlotlyJS
-using BenchmarkTools
+using BenchmarkTools, ProgressMeter
 using Random
 
 
@@ -189,6 +189,34 @@ function uncumulate(arr::Vector{Int64})
     return out
 end
 
+function add_instancecount!(graph::MetaGraph, edge::Tuple{Int64, Int64})
+
+    val = add_edge!(graph, edge)
+
+    if val == true
+        set_prop!(graph, Edge(edge), :count, 1)
+    else
+        tmp = get_prop(graph, Edge(edge), :count)
+        set_prop!(graph, Edge(edge), :count, tmp + 1)
+    end
+end
+
+function vertex_dict(df::DataFrameRow)
+    dici = Dict()
+    dici[:patnum] = df[:patnum]
+    dici[:year] = df[:year]
+    dici[:technology] = df[:technology]
+    dici[:field_num] = df[:field_num]
+    dici[:subcategory_id] = df[:subcategory_id]
+
+    return dici
+end
+
+function addinfo_vertex!(graph::MetaGraph, df::DataFrame)
+    for i in eachindex(df[!,:patnum])
+        set_prop!(graph, df[i, :firm_src], Symbol(df[i, :patnum]), vertex_dict(df[i,:]))
+    end
+end
 ## Loading finished data
 
 cd(data_path_tmp)
@@ -216,16 +244,7 @@ for el in T_undirected
     add_instancecount!(G2, el)
 end
 
-# For now random weights to play around
-rweights = rand(n_edges)
-
-for (ind, element) in enumerate(edges(G2))
-    set_prop!(G2, element, :weight, rweights[ind])
-end
-
-@time triangle_count_weights(G2)
-@time triangle_count(G2)
-abc = triangle_count_tuple(G2)
 
 # Checkoing whether I have the same triangle count as it should be
 triangle_count(G2).== triangles(G2)
+names(df2)
