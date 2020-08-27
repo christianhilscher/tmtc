@@ -58,9 +58,6 @@ Takes the raw data files and merges them into somthing useable
 function make_df(raw_cites::DataFrame,
                 raw_grants::DataFrame,
                 raw_firms::DataFrame)
-    """
-    Takes the raw data files and merges them into somthing useable
-    """
 
     edit_firms = make_ids(raw_firms, "firm_num")
 
@@ -78,9 +75,12 @@ function make_df(raw_cites::DataFrame,
     # Adding year from pubdate
     year_list = first.(string.(dst_source[!, "pubdate"]), 4)
     dst_source[!, "year"] = year_list
+    dst_source[!, :dst] =  tryparse.(Int64, dst_source[!,:dst])
+    dst_source = dst_source[isnothing.(dst_source[!,:dst]).!=1,:]
 
     # Narrowing it down
     df_out = dst_source[!, [:year, :firm_dst, :firm_src, :ipc, :ipcver, :patnum, :dst]]
+
 
     return df_out
 end
@@ -132,7 +132,7 @@ end
 
 function make_unique(df::DataFrame)
     # Only keeping unique combinations of firms
-    df[!,"srcdst"] = tuple.(df[!,"firm_src"], df[!,"firm_dst"])
+    df[!, "srcdst"] = [(df[i, :firm_src], df[i, :firm_dst]) for i in eachindex(df[!, :firm_src])]
 
     return unique(df, "srcdst")
 end
@@ -166,7 +166,7 @@ df4 = make_unique(df3)
 ## Playground
 
 cd(data_path_tmp)
-CSV.write("df1.csv", df1)
+CSV.write("df1.csv", df13)
 CSV.write("df2.csv", df2)
 CSV.write("df3.csv", df3)
 CSV.write("df4.csv", df4)

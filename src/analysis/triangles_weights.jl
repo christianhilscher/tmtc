@@ -2,7 +2,7 @@ using Pkg
 using LightGraphs, MetaGraphs, SimpleWeightedGraphs
 using CSV, DataFrames
 using PlotlyJS
-using BenchmarkTools, ProgressMeter
+using BenchmarkTools, ProgressMeter, Profile
 using Random
 
 
@@ -212,10 +212,42 @@ function vertex_dict(df::DataFrameRow)
     return dici
 end
 
+function edge_dict(df::DataFrameRow, df_lookup::DataFrame)
+    dst_info = DataFrame()
+    dst_info = df_lookup[df_lookup[!,:dst].==df[:patnum],:]
+    dici = Dict{Any, Any}()
+    if size(dst_info, 1)>0
+        for sym in [:year, :technology, :ipc_code, :subcategory_id]
+            dici[sym] = (df[sym], dst_info[1, sym])
+        end
+    else
+        for sym in [:year, :technology, :ipc_code, :subcategory_id]
+            dici[sym] = ("missing", "missing")
+        end
+    end
+    return dici
+end
+
 function addinfo_vertex!(graph::MetaGraph, df::DataFrame)
     for i in eachindex(df[!,:patnum])
         set_prop!(graph, df[i, :firm_src], Symbol(df[i, :patnum]), vertex_dict(df[i,:]))
     end
+end
+
+function addinfo_edge!(graph::MetaGraph, df::DataFrame)
+
+    df_lookup = lookup_frame(df)
+
+    for ind in eachindex(df[!, :srcdst])
+        set_props!(graph, Edge(df[ind,:srcdst]), edge_dict(df[ind,:], df_lookup))
+    end
+end
+
+function lookup_frame(df::DataFrame)
+    owner_info = leftjoin(df[!,[:dst]], df[!,[:patnum, :ipc_code, :year, :subcategory_id, :technology]], on = :dst => :patnum)
+    owner_info = dropmissing(owner_info)
+    unique!(owner_info)
+    return owner_info
 end
 ## Loading finished data
 
@@ -227,8 +259,9 @@ df4 = CSV.read("df4.csv")
 
 ## Playground
 
-df = df3
-df[!, "srcdst"] = [(df[i, :firm_src], df[i, :firm_dst]) for i in eachindex(df[!, :firm_src])]
+df3[!, "srcdst"] = [(df3[i, :firm_src], df3[i, :firm_dst]) for i in eachindex(df3[!, :firm_src])]
+df3[!, :dst] =  tryparse.(Int64, df3[!,:dst])
+df = df3[isnothing.(df3[!,:dst]).!=1,:]
 
 n_nodes = maximum([maximum(df[!,:firm_src]), maximum(df[!,:firm_dst])])
 
@@ -236,15 +269,31 @@ G1 = MetaGraph(n_nodes)
 G2 = MetaGraph(n_nodes)
 
 for el in df[!, "srcdst"]
-    add_instancecount!(G1, el)
+    # add_instancecount!(G1, el)
+    add_edge!(G1, el)
 end
+
+@profile makeundirected(G1)
+Profile.print()
 
 T_undirected = makeundirected(G1)
 for el in T_undirected
-    add_instancecount!(G2, el)
+    # add_instancecount!(G2, el)
+    add_edge!(G2, el)
 end
 
 
 # Checkoing whether I have the same triangle count as it should be
 triangle_count(G2).== triangles(G2)
 names(df2)
+
+println(df[1,:])
+
+
+
+
+
+
+
+
+@btime addinfo_edge!(G1, df, owner_info)
