@@ -289,11 +289,4 @@ names(df2)
 
 println(df[1,:])
 
-
-
-
-
-
-
-
 @btime addinfo_edge!(G1, df, owner_info)
