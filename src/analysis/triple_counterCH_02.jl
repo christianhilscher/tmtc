@@ -149,7 +149,6 @@ function count_triangles(df::DataFrame)
         tmp = triangles(G_undirected)
         trs[ind] = sum(tmp)/3
         cts[ind] = length(unique(df_rel[!, :srcdst]))
-        #cts[ind] = ne(G_directed)
     end
 
     # Since the triangles add up over the years also use the cumulative sum for citations
@@ -178,7 +177,7 @@ sum(triangles(make_graph(df_discrete)))/3
 sum(triangles(make_graph(df_complex)))/3
 
 G1 = make_graph(df)
-triangles(G1)Also
+triangles(G1)
 
 function trs_over_cites(df_d::DataFrame, df_c::DataFrame, df_t::DataFrame)
 
