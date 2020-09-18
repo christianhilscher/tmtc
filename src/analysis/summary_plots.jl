@@ -381,6 +381,9 @@ for i = 1:size(df, 1)
     set_prop!(G_undirected, df[i, :srcdst][1], df[i, :srcdst][2], :count, df[i, :count])
 end
 
+unique(df)
+unique(all_tuples)
+
 # Getting the tuple (X, Y, Z) which form a triangle
 all_tuples = triangle_count_tuple(G_undirected)
 # Getting the corresponding weights
