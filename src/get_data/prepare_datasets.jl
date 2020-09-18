@@ -81,6 +81,7 @@ function make_df(raw_cites::DataFrame,
                 edit_grants::DataFrame,
                 raw_firms::DataFrame)
 
+    # ATTENTION : Assiging new firm numbers here; need it for graph later
     edit_firms = make_ids(raw_firms, "firm_num")
 
     owner_source = leftjoin(raw_cites, edit_firms, on = :src => :patnum)
