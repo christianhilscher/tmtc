@@ -75,7 +75,7 @@ def triads(G, nodes = None):
             preds_inter = preds_j.intersection(succs_noj)
             #now, that we have the intersections, combine them to 1 set 
             union = succs_inter.union(preds_inter)
-            
             for x in union: 
                 triads.append((k, j, x))
     return(triads)
+len(triads)
