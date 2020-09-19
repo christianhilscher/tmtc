@@ -13,13 +13,13 @@ data_path_tmp = joinpath(wd, "data/tmp/")
 graph_path = joinpath(wd, "output/tmp/")
 
 
-function gather_bypatent(df::DataFrame)
+function gatherby_patent(df::DataFrame)
 
     patent_arr = Array{String}(undef, length(unique(df[!,:pat_no])))
     txt_arr = similar(patent_arr)
 
     @progress for (ind, patent) in enumerate(unique(df[!,:pat_no]))
-        patent_arr[ind] = patent
+        patent_arr[ind] = string(patent)
         txt_arr[ind] = join(df[df[!,:pat_no].==patent, :claim_txt])
     end
 
@@ -91,14 +91,48 @@ end
 
 cd(join([data_path, "csv/"]))
 df_text = CSV.read("patent_claims_fulltext.csv")
+df_text[!,:pat_no] = tryparse.(Int64, df_text[!,:pat_no])
+df_text = df_text[isnothing.(df_text[!, :pat_no]).!=1,:]
 
 df = df_text[1:10000,:]
 
-abc = gather_bypatent(df)
+abc = gatherby_patent(df_text)
 
 
+
+
+abc[!,:pat_no] = tryparse.(Int64, abc[!,:pat_no])
+
+pat1 = 3930271
+pat2 = 3931342
 
 ghi = getweightmatrix(abc)
 cosine_similarity(ghi[1,:], ghi[4,:])
 
 get_edgeweigth("3930271", "3931342", abc, ghi)
+
+
+
+function makecorpus(pat1::Int64, pat2::Int64, df::DataFrame)
+
+    tmp = Vector{StringDocument}(undef, 2)
+    tmp[1] = StringDocument(df[df[!, :pat_no].==pat1, :claim_txt][1])
+	tmp[2] = StringDocument(df[df[!, :pat_no].==pat2, :claim_txt][1])
+
+    crps = Corpus(tmp)
+    return crps
+end
+
+function get_similarityweight(patent1::Int64, patent2::Int64, df::DataFrame)
+
+	tmp = makecorpus(patent1, patent2, df)
+	#preproces!(tmp)
+	update_lexicon!(tmp)
+
+	m = DocumentTermMatrix(tmp)
+	weights = tf_idf(m)
+	return cosine_similarity(weights[1,:], weights[2,:])
+end
+
+
+get_similarityweight(pat1, pat2, abc)

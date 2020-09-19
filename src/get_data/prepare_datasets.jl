@@ -10,7 +10,6 @@ data_path_full = joinpath(wd, "data/full/")
 data_path_tmp = joinpath(wd, "data/tmp/")
 graph_path = joinpath(wd, "output/tmp/")
 
-###############################################################################
 """
 Recodes the firm_id variable from 1 to n. That's because the graph package only takes vertices from 1 to n and not strings or anything similar
 """
@@ -30,59 +29,18 @@ function make_ids(df_firm::DataFrame,
     return df_new
 end
 
-"""
-Same procedure as with firm ids
-"""
-function unique_patnum(df::DataFrame)
-    tmp_arr = Array(df[!,:patnum])
-    append!(tmp_arr, Array(df[!,:dst]))
+function add_suffix(df::DataFrame, cols::Vector{String}, suff::String)
 
-    unique!(tmp_arr)
-    new_ids = collect(1:length(tmp_arr))
-
-    df_lookup = DataFrame(old_patnum = tmp_arr, new_patnum = new_ids)
-
-    df = leftjoin(df, df_lookup, on = :patnum => :old_patnum)
-    rename!(df, "new_patnum" => "patnum_integer")
-
-    df = leftjoin(df, df_lookup, on = :dst => :old_patnum)
-    select!(df, Not(:dst))
-    rename!(df, "new_patnum" => "dst_integer")
-
+    for i in cols
+        df = rename(df, i => join([i, suff]))
+    end
     return df
 end
 
-"""
-Takes the raw data files and merges them into somthing useable
-"""
-function make_df(raw_cites::DataFrame,
-                raw_grants::DataFrame,
-                raw_firms::DataFrame)
-
-    edit_firms = make_ids(raw_firms, "firm_num")
-
-    # Getting the owners of the patents
-    owner_source = leftjoin(raw_cites, edit_firms, on = :src => :patnum)
-    owner_source = rename(owner_source, "firm_num" => "firm_src")
-
-    # Getting the owners of the cited patents
-    dst_source = leftjoin(owner_source, edit_firms, on = :dst => :patnum)
-    dst_source = rename(dst_source, "firm_num" => "firm_dst")
-
-    dst_source = leftjoin(dst_source, raw_grants[:,[:pubdate, :patnum, :ipc, :ipcver]], on = :src => :patnum)
-    dst_source = rename(dst_source, "src" => "patnum")
-
-    # Adding year from pubdate
-    year_list = first.(string.(dst_source[!, "pubdate"]), 4)
-    dst_source[!, "year"] = year_list
-    dst_source[!, :dst] =  tryparse.(Int64, dst_source[!,:dst])
-    dst_source = dst_source[isnothing.(dst_source[!,:dst]).!=1,:]
-
-    # Narrowing it down
-    df_out = dst_source[!, [:year, :firm_dst, :firm_src, :ipc, :ipcver, :patnum, :dst]]
-
-
-    return df_out
+function to_int(df::DataFrame, col::String)
+    df[!, col] =  tryparse.(Int64, df[!,col])
+    df = df[isnothing.(df[!,col]).!=1,:]
+    return df
 end
 
 """
@@ -119,6 +77,47 @@ function addnber(df::DataFrame,
     return df
 end
 
+function make_df(raw_cites::DataFrame,
+                edit_grants::DataFrame,
+                raw_firms::DataFrame)
+
+    edit_firms = make_ids(raw_firms, "firm_num")
+
+    owner_source = leftjoin(raw_cites, edit_firms, on = :src => :patnum)
+    owner_source = rename(owner_source, "firm_num" => "firm_src")
+
+    # Getting the owners of the cited patents
+    dst_source = leftjoin(owner_source, edit_firms, on = :dst => :patnum)
+    dst_source = rename(dst_source, "firm_num" => "firm_dst")
+
+    rename_cols = filter!(x->x != "patnum", names(edit_grants))
+    b_src = add_suffix(edit_grants, rename_cols, "_src")
+    b_dst = add_suffix(edit_grants, rename_cols, "_dst")
+
+
+    dst_source = leftjoin(dst_source, b_src, on = :src => :patnum)
+    dst_source = leftjoin(dst_source, b_dst, on = :dst => :patnum)
+
+    return dst_source
+end
+
+function add_info(raw_grants::DataFrame, df_ipc::DataFrame, df_nber::DataFrame, df_nber_cat::DataFrame, df_nber_subcat::DataFrame)
+
+    edit_grants = make_year(raw_grants)
+
+    edit_grants = edit_grants[:,[:patnum, :year, :ipc]]
+    a = add_ipc(edit_grants, df_ipc)
+    b = addnber(a, df_nber, df_nber_cat, df_nber_subcat)
+
+    return b
+end
+
+function make_year(df::DataFrame)
+    year_list = first.(string.(df[!, "pubdate"]), 4)
+    df[!, "year"] = year_list
+    return df
+end
+
 function drop_missings(df::DataFrame)
     df_out = dropmissing(df)
     return df_out
@@ -136,8 +135,6 @@ function make_unique(df::DataFrame)
 
     return unique(df, "srcdst")
 end
-
-
 ## Reading in and making data
 
 cd(data_path_full)
@@ -155,15 +152,17 @@ df_nber = CSV.read("nber.tsv")
 df_nber_cat = CSV.read("nber_category.tsv")
 df_nber_subcat = CSV.read("nber_subcategory.tsv")
 
-df1 = make_df(df_cite, df_grants, df_firm_grant)
-# df11 = unique_patnum(df1)
-df12 = add_ipc(df1, df_ipc)
-df13 = addnber(df12, df_nber, df_nber_cat, df_nber_subcat)
+
+grant_info = add_info(df_grants, df_ipc, df_nber, df_nber_cat, df_nber_subcat)
+df1 = make_df(df_cite, grant_info, df_firm_grant)
+
+df12 = to_int(df1, "src")
+df13 = to_int(df12, "dst")
+
 df2 = drop_missings(df13)
 df3 = rm_self_citations(df2)
 df4 = make_unique(df3)
 
-## Playground
 
 cd(data_path_tmp)
 CSV.write("df1.csv", df13)

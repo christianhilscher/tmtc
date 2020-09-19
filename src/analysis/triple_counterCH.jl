@@ -72,11 +72,12 @@ function count_triangles(df::DataFrame, df_citations::DataFrame)
         # Counting triangles in that graph only containing both directions
         tmp = triangles(G_undirected)
         trs[ind] = sum(tmp)/3
-        cts[ind] = length(unique(df_rel_cites[!, :patnum]))
+        #cts[ind] = length(unique(df_rel_cites[!, :srcdst]))
+        cts[ind] = ne(G_directed)
     end
 
     # Since the triangles add up over the years also use the cumulative sum for citations
-    return trs, cumsum(cts)
+    return trs, cts
 end
 
 function plot_ratios(df::DataFrame,
@@ -137,14 +138,14 @@ function uncumulate(arr::Vector{Int64})
     return out
 end
 
-## Loading finished data
+# Loading finished data
 
-# cd(data_path_tmp)
-# df1 = CSV.read("df1.csv")
-# df2 = CSV.read("df2.csv")
-# df3 = CSV.read("df3.csv")
-# df4 = CSV.read("df4.csv")
-# CSV.write("df4.csv", df4)
+cd(data_path_tmp)
+df1 = CSV.read("df1.csv")
+df2 = CSV.read("df2.csv")
+df3 = CSV.read("df3.csv")
+df4 = CSV.read("df4.csv")
+CSV.write("df4.csv", df4)
 ## Calculating and plotting
 # plot_ratios(df4, df1, "Triangles/Total Citations", "1")
 
@@ -152,7 +153,7 @@ overall = count_triangles(df4, df2)
 ## Plotting different measures
 
 # Differentiating by field and technlogy respectively
-technology_results = count_by_fields(df3, df2, "technology")
+technology_results = count_by_fields(df3, df3, "technology")
 field_results = count_by_fields(df3, df2, "subcategory_id")
 
 # Functions for plotting
@@ -183,15 +184,17 @@ end
 
 function trs_over_cites(df::DataFrame)
 
-    y1 = df[!,"trs_discrete"]./df[!,"cites_discrete"]
-    y2 = df[!,"trs_complex"]./df[!,"cites_discrete"]
+    y1 = df[!,"trs_discrete"]./(df[!,"cites_discrete"]+df[!,"cites_complex"])
+    y2 = df[!,"trs_complex"]./(df[!,"cites_discrete"]+df[!,"cites_complex"])
 
     trace1 = scatter(df, x = :year, y = y1, mode="lines", name="discrete triples")
 
     trace2 = scatter(df, x = :year, y = y2, mode="lines", name="complex triples")
 
+    trace3 = scatter(df, x = :year, y = y1+y2, mode="lines", name="total triples")
+
     layout = Layout(;title="Triples relative to total patents")
-    data = [trace1, trace2]
+    data = [trace1, trace2, trace3]
     plot(data, layout)
 end
 
@@ -242,3 +245,7 @@ sum(technology_results[25, ["trs_discrete", "trs_complex"]])/overall[1][25]
 # sort!(out, :subcategory_id)
 # rename!(out, "ratio" => "share")
 # println(out)
+technology_results[:,:cites] = technology_results[:,:cites_discrete] + technology_results[:,:cites_complex]
+println(technology_results[:,[:year, :trs_discrete, :trs_complex, :cites_discrete, :cites_complex, :cites]])
+
+unique(df3[:,:srcdst])

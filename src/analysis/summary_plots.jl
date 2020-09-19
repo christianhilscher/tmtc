@@ -3,7 +3,8 @@ using LightGraphs, MetaGraphs, SimpleWeightedGraphs
 using CSV, DataFrames
 using PlotlyJS
 using BenchmarkTools, ProgressMeter, Profile
-using Random
+using Random, GraphPlot
+using Statistics
 
 
 wd = pwd()
@@ -13,7 +14,8 @@ data_path_full = joinpath(wd, "data/full/")
 data_path_tmp = joinpath(wd, "data/tmp/")
 graph_path = joinpath(wd, "output/tmp/")
 
-###############################################################################
+## Functions
+
 """
 Takes a graph object as input and only returns those neighbors who cite both ways
 """
@@ -32,12 +34,12 @@ function makeundirected(graph::MetaDiGraph)
         # Loop over all neighbors of vertice v to see whether the connection goes both ways
         for i in ins
             if in(i, outs)
-                push!(boths, (v, i))
+                push!(boths, Tuple(sort!([v, i])))
             end
         end
     end
 
-    return boths
+    return unique!(boths)
 end
 
 insorted(item, collection) = !isempty(searchsorted(collection, item))
@@ -282,53 +284,128 @@ function triangles_from_df(dataf::DataFrame)
     return trs, cumsum(cts)
 end
 
-function filter_technology(df::DataFrame, tech::String)
+function columnbyyear(dataf_d::DataFrame, dataf_c::DataFrame, dataf_t::DataFrame,  col::String, uni::Int64)
 
-    cond = df[!,:technology_src] .== df[!,:technology_dst] .== tech
-    return df[cond,:]
+    years = sort(unique(dataf_t[!,:year_src]))
+    out = Array{Int64}(undef, length(years), 3)
+
+    if uni==1
+        for (ind, y) in enumerate(years)
+            out[ind, 1] = length(unique(dataf_d[dataf_d[:year_src] .<= y, col]))
+            out[ind, 2] = length(unique(dataf_c[dataf_c[:year_src] .<= y, col]))
+            out[ind, 3] = length(unique(dataf_t[dataf_t[:year_src] .<= y, col]))
+        end
+    else
+        for (ind, y) in enumerate(years)
+            out[ind, 1] = length(dataf_d[dataf_d[:year_src] .<= y, col])
+            out[ind, 2] = length(dataf_c[dataf_c[:year_src] .<= y, col])
+            out[ind, 3] = length(dataf_t[dataf_t[:year_src] .<= y, col])
+        end
+    end
+
+    df_out = DataFrame(:year => years, :value_discrete => out[:,1], :value_complex => out[:,2], :value_total => out[:,3])
+    return df_out
 end
-## Loading finished data
 
-cd(data_path_tmp)
-df3 = CSV.read("df3.csv")
+function plot_summary(df::DataFrame, title::String)
+    trace1 = scatter(df, x = :year, y = :value_discrete, mode="lines", name="discrete")
+    trace2 = scatter(df, x = :year, y = :value_complex, mode="lines", name="complex")
+    trace3 = scatter(df, x = :year, y = :value_total, mode="lines", name="total")
 
-
-## Playground
-
-
-df3[!, "srcdst"] = [(df3[i, :firm_src], df3[i, :firm_dst]) for i in eachindex(df3[!, :firm_src])]
-df = df3[df3[!,:year_src] - df3[!,:year_dst] .< 15,:]
-
-df_complex = filter_technology(df, "complex")
-df_discrete = filter_technology(df, "discrete")
-
-discretex, discretey = triangles_from_df(df_discrete)
-complexx, complexy = triangles_from_df(df_complex)
-totalx, totaly = triangles_from_df(df)
-
-## Plotting
-
-function trs_over_cites(df_d::DataFrame, df_c::DataFrame, df_t::DataFrame)
-
-    y1 = df_d[!,:trs]./df_t[!,:edges]
-    y2 = df_c[!,:trs]./df_t[!,:edges]
-    y3 = df_t[!,:trs]./df_t[!,:edges]
-
-    trace1 = scatter(df_d, x = :year, y = y1, mode="lines", name="discrete triples")
-
-    trace2 = scatter(df_c, x = :year, y = y2, mode="lines", name="complex triples")
-
-    trace3 = scatter(df_t, x = :year, y = y3, mode="lines", name="total triples")
-
-    layout = Layout(;title="Weighted triangles relative to total citations")
+    layout = Layout(;title=title)
     data = [trace1, trace2, trace3]
     plot(data, layout)
 end
 
-df_plot_discrete = DataFrame(:year => sort(unique(df_discrete[!,:year_src])), :trs => discretex, :edges => discretey)
+function remove_outliers(data::Array{Int64, 1}, p::Float64)
+    upper = quantile(data, 1-p)
+    lower = quantile(data, p)
 
-df_plot_complex = DataFrame(:year => sort(unique(df_complex[!,:year_src])), :trs => complexx, :edges => complexy)
+    data = data[data .< upper]
+    data = data[data .> lower]
 
-df_plot_total = DataFrame(:year => sort(unique(df[!,:year_src])), :trs => totalx, :edges => totaly)
+    return data
+end
 
-trs_over_cites(df_plot_discrete, df_plot_complex, df_plot_total)
+function histo(data::Vector{Int64}, title::String)
+
+    # remove 2.5% outlier above and below
+    data_clean = remove_outliers(data, 0.025)
+    trace1 = histogram(x=data_clean, opacity=0.65)
+    layout = Layout(title=title)
+
+    data = [trace1]
+    plot(data, layout)
+end
+## Calculating
+
+cd(data_path_tmp)
+
+df3 = CSV.read("df3.csv")
+
+df3[!, "srcdst"] = [(df3[i, :firm_src], df3[i, :firm_dst]) for i in eachindex(df3[!, :firm_src])]
+df = df3[df3[!,:year_src] - df3[!,:year_dst] .< 15,:]
+
+## Looking at denominator
+
+df_complex = filter_technology(df, "complex")
+df_discrete = filter_technology(df, "discrete")
+
+variable = "srcdst"
+title = join(["Cumulative number of unique firm to firm citations; variable: ", variable])
+
+#unique or not
+un = 1
+data = columnbyyear(df_discrete, df_complex, df, variable, un)
+plot_summary(data, title)
+
+## Exploring weighted triangles and their properties
+
+dataf = df
+n_nodes = maximum([maximum(dataf[!,:firm_src]), maximum(dataf[!,:firm_dst])])
+
+# Initialize Graphs
+G_directed = MetaDiGraph(n_nodes)
+G_undirected = MetaGraph(n_nodes)
+
+
+for el in dataf[!, :srcdst]
+    add_instancecount!(G_directed, el)
+end
+
+# Getting the tuple and the number of connections between them
+df = undirected_data(G_directed)
+
+for i = 1:size(df, 1)
+    add_edge!(G_undirected, df[i, :srcdst])
+    set_prop!(G_undirected, df[i, :srcdst][1], df[i, :srcdst][2], :count, df[i, :count])
+end
+
+unique(df)
+unique(all_tuples)
+
+# Getting the tuple (X, Y, Z) which form a triangle
+all_tuples = triangle_count_tuple(G_undirected)
+# Getting the corresponding weights
+out_list = get_triangleweighted(all_tuples, G_undirected)
+
+## Playing with results
+
+gdf = groupby(dataf, :srcdst)
+gdf_data = combine(gdf, nrow)
+
+# conditional on being in a triangle
+out = Vector{Tuple{Int64, Int64}}()
+
+for i in all_tuples
+    push!(out, Tuple(sort!([i[1], i[2]])))
+    push!(out, Tuple(sort!([i[1], i[3]])))
+    push!(out, Tuple(sort!([i[2], i[3]])))
+end
+
+count_in_triangle = get_weights(G_directed, unique!(out))
+
+histo(gdf_data[!,:nrow], "Histogram of number of connections between two firms / unconditional")
+histo(df[!,:count], "Histogram of number of connections between two firms / conditional on being mutual")
+histo(count_in_triangle, "Histogram of number of connections between two firms / conditional on being in a triangle")
+histo(out_list, "Histogram of total number of connections in triangles")
