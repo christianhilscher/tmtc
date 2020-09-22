@@ -140,11 +140,35 @@ df = df3[df3[!,:year_src] - df3[!,:year_dst] .< 15,:]
 
 ## First try w/ function
 
-df_complex = filter_technology(df, "complex")
-df_discrete = filter_technology(df, "discrete")
+function triads_by_technology(dataf::DataFrame)
 
-discretex, discretey = count_triangles(df_discrete)
-complexx, complexy = count_triangles(df_complex)
+    df_complex = filter_technology(df, "complex")
+    df_discrete = filter_technology(df, "discrete")
+
+    firsthalf = @spawn count_triangles(df_discrete)
+    complexx, complexy = count_triangles(df_complex)
+
+    wait(firsthalf)
+
+    discretex, discretey = fetch(firsthalf)
+
+    return discretex, complexx
+end
+
+function triads_by_technology1(dataf::DataFrame)
+
+    df_complex = filter_technology(df, "complex")
+    df_discrete = filter_technology(df, "discrete")
+
+    discretex, discretey = count_triangles(df_discrete)
+    complexx, complexy = count_triangles(df_complex)
+
+    return discretex, complexx
+end
+
+@time a, b = triads_by_technology(df)
+@time c, d = triads_by_technology1(df)
+
 totalx, totaly = count_triangles(df)
 ## Plotting
 function trs_over_cites(df_d::DataFrame, df_c::DataFrame, df_t::DataFrame)
