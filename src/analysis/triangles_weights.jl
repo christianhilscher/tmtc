@@ -168,7 +168,6 @@ function triangle_count_tuple(g::AbstractMetaGraph)
     return out_list
 end
 
-
 function sumweights(g::MetaGraph, j::Int64, k::Int64, l::Int64)
 
     out = sum([get_prop(g, Edge(j, k), :count),
