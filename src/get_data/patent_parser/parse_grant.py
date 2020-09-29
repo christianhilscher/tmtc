@@ -10,13 +10,6 @@ from itertools import chain
 from tools.parse import *
 from tools.tables import ChunkWriter, DummyWriter
 
-#set up of directory 
-wd_lc = '/Users/llccf/OneDrive/Dokumente/tmtc/src/get_data/'
-wd_ch = 'add_me'
-
-os.chdir(wd_lc)
-#os.chdir(wd_ch)
-
 # parse it up
 def parse_grant_gen1(fname):
     pat = None

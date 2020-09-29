@@ -66,7 +66,7 @@ def get_triads(G, nodes = None):
             for x in succs_inter: 
                 triads.append((k, j, x))
     number = len(triads)
-    return(number, triads)
+    return(number)
 
 def triads_and_cits(df, G_di, years, edgecol = "srcdstpats"):
     """
@@ -132,3 +132,11 @@ years = range(1976, 2001)
 G = setup_G(df3, "src", "dst")
 
 triads, citations = triads_and_cits(active, G, years)
+
+active_disc = active[(active["technology_src"] == "discrete") & (active["technology_dst"] == "discrete")]
+G = nx.create_empty_copy(G)
+triads_disc, cits_disc = triads_and_cits(active_disc, G, years)
+
+active_com = active[(active["technology_src"] == "complex") & (active["technology_dst"] == "complex")]
+G = nx.create_empty_copy(G)
+triads_com, cits_com = triads_and_cits(active_com, G, years)

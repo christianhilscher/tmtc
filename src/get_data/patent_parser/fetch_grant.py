@@ -4,14 +4,9 @@ import os
 import time
 import argparse
 
-<<<<<<< HEAD:src/get_data/patent_parser/fetch_grant.py
 wd_ch = "/Users/christianhilscher/Desktop/tmtc/src/get_data"
-wd_lc = "/Users/llccf/OneDrive/Dokumente/tmtc/src/get_data"
+wd_lc = "/Users/llccf/OneDrive/Dokumente/tmtc/src/get_data/patent_parser/"
 os.chdir(wd_lc)
-=======
-wd = "/Users/christianhilscher/Desktop/tmtc/src/get_data"
-os.chdir(wd)
->>>>>>> 08b5c61847b9663086dc7a3871b31f529e18f312:src/get_data/fetch_grant.py
 
 parser = argparse.ArgumentParser(description='fetch patent grants from USPTO bulk data')
 parser.add_argument('--files', type=str, default='meta/grant_files.txt', help='list of grant files to fetch')

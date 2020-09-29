@@ -8,6 +8,8 @@ import numpy as np
 import pandas as pd
 from lxml.etree import XMLPullParser
 
+wd_lc = '/Users/llccf/OneDrive/Dokumente/tmtc/src/get_data/patent_parser/'
+os.chdir(wd_lc)
 ##
 ## xml parsing
 ##
