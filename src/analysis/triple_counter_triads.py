@@ -66,7 +66,7 @@ def get_triads(G, nodes = None):
             for x in succs_inter: 
                 triads.append((k, j, x))
     number = len(triads)
-    return(number)
+    return(number, triads)
 
 def triads_and_cits(df, G_di, years, edgecol = "srcdstpats"):
     """
@@ -89,6 +89,7 @@ def triads_and_cits(df, G_di, years, edgecol = "srcdstpats"):
     #initialize empty dictionaries that will be filled 
     cit_dict = {}
     tri_dict = {}
+    triads_dict = {}
     #loop over years 
     for i in years:
         """
@@ -108,12 +109,13 @@ def triads_and_cits(df, G_di, years, edgecol = "srcdstpats"):
         #add edges to directed graph; note: not a multigraph, same edge that appears multiple times only added once
         G_di.add_edges_from(edges)
         #count triangles 
-        tris = get_triads(G_di)
+        tris, triads = get_triads(G_di)
         #add everything to dictionaries 
         tri_dict[i] = tris 
+        triads_dict[i] = triads
         cit_dict[i] = tot_cit
         print(i)
-    return(tri_dict, cit_dict)
+    return(tri_dict, cit_dict, triads_dict)
 
 #**************
 #! DATA
@@ -131,12 +133,13 @@ active = df3[df3["year_src"] - df3["year_dst"] < 15]
 years = range(1976, 2001)
 G = setup_G(df3, "src", "dst")
 
-triads, citations = triads_and_cits(active, G, years)
+tris, citations, triads = triads_and_cits(active, G, years)
 
 active_disc = active[(active["technology_src"] == "discrete") & (active["technology_dst"] == "discrete")]
 G = nx.create_empty_copy(G)
-triads_disc, cits_disc = triads_and_cits(active_disc, G, years)
+tris_disc, cits_disc, triads_disc = triads_and_cits(active_disc, G, years)
 
 active_com = active[(active["technology_src"] == "complex") & (active["technology_dst"] == "complex")]
 G = nx.create_empty_copy(G)
-triads_com, cits_com = triads_and_cits(active_com, G, years)
+tris_com, cits_com, triads_com = triads_and_cits(active_com, G, years)
+
