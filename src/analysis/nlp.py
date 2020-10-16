@@ -76,7 +76,10 @@ tock = time.time()
 timing = tock - tick 
 print(timing)
 
-#playing around
+#playing around, testing various procedures
+
+#!note: check sklearn docs to see that the tf-idf implemented using TfidfVectorizer 
+#!is not standard procedure and not the same as in DeGrazia et al. (and Wikipedia)
 results = get_tfidf([claim_src, claim_dst])
 len(results.toarray()[0])
 len(claim_src.split())
@@ -91,6 +94,9 @@ text2 = "To become or not to become"
 results, names = get_tfidf([text1, text2])
 results[0].toarray()
 results[1].toarray()
+
+#!To circumvent problem descirbed above, can use COuntVectorizer and 
+#!use raw counts it creates to construct own TF-IDF algorithm
 
 from sklearn.feature_extraction.text import CountVectorizer
 

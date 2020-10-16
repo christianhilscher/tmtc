@@ -67,6 +67,19 @@ def get_triads(G, nodes = None):
     number = len(triads)
     return(number, triads)
 
+def getthicket(G, tris, weight = "weight"):
+    """
+    Follow-up funtion to get_triads. Use list of triangles to get weights and add up
+    """
+    weight_sums = {}
+    for x in tris:
+        w1 = G[x[0]][x[1]][weight]
+        w2 = G[x[0]][x[2]][weight]
+        w3 = G[x[1]][x[2]][weight]
+        weight_sums[(x[0], x[1], x[2])] = np.sum((w1, w2, w3))
+    thicket = np.sum(list(weight_sums.values()))
+    return(weight_sums, thicket)
+
 def triads_and_cits(df, G_di, years, edgecol = "srcdstpats"):
     """
     Function that binds all other functions to count total patent citations and
@@ -121,7 +134,10 @@ def triads_and_cits(df, G_di, years, edgecol = "srcdstpats"):
 #**************
 df3post2000 = pd.read_csv("data/df3to2020.csv")
 df3pre2000 = pd.read_csv("data/df3 3.csv")
-
+df3 = pd.read_csv("data/df3_all.csv")
+'''
+#!merging the two datasets together 
+#!just let it tunr once and save the csv afterwards
 #for new datasets need to rename columns real quick
 df3post2000 = df3post2000.drop(["Unnamed: 0", "patnum_x.1", "patnum_y.1", "patnum_x", "patnum_y"], axis = 1)
 
@@ -137,9 +153,12 @@ df3post2000 = df3post2000.rename(columns = {i: j for i, j in zip(rename_src, cor
 df3post2000 = df3post2000.rename(columns = {i: j for i, j in zip(rename_dst, correct_dst)})
 
 df3 = df3post2000.append(df3pre2000)
+df3.to_csv("data/df3_all.csv")
+'''
 #note: need a new (src, dst) column for dataframe, which is now based on 
 #patent numbers
 df3["srcdstpats"] = list(zip(df3["src"], df3["dst"]))
+
 #filter for only active patents
 active = df3[df3["year_src"] - df3["year_dst"] < 15]
 

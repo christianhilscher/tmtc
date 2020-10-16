@@ -13,10 +13,10 @@ import collections
 wd_lc = "/Users/llccf/OneDrive/Dokumente/tmtc/"
 os.chdir(wd_lc)
 
-###########################
-#FUNCTIONS
-###########################
-#minifunctions for MultiDiGraph
+#*##########################
+#!FUNCTIONS
+#*##########################
+
 def get_nodes(df, nodescol = "nodes"):
     """
     Get nodes from df containing nodes info.
@@ -220,9 +220,9 @@ Notes:
     - hence, in total need to divide by 24 to get same number of triangles as in undirected graph
 """
 
-###########################
-#DATA
-###########################
+#*##########################
+#!DATA
+#*##########################
 
 df_2 = pd.read_csv("data/df2.csv")
 df_3 = pd.read_csv("data/df3.csv")
@@ -230,9 +230,9 @@ df_4 = pd.read_csv("data/df4.csv")
 
 grant_grant = pd.read_csv("data/grant_grant.csv")
 type(grant_grant.loc[0, "patnum"])
-###########################
-#GRAPH
-###########################
+#*##########################
+#!GRAPH
+#*##########################
 
 #changing the setup of the analysis:
 #instead of filtering the data and tehn creating a graph, I will
@@ -242,7 +242,9 @@ type(grant_grant.loc[0, "patnum"])
 df_3["weights"] = np.random.rand(len(df_3))
 
 #set up graph environment
+nodes = get_nodes(df_3)
 G = setup_G(df_3, nodes)
+
 #add all edges
 df = df_3
 years = np.arange(1976, 2001)
@@ -263,10 +265,13 @@ for year in years:
     edges = list(set([i for i in edges]))
     G.add_edges_from(edges)
     print(year)
-#get node_dict
+
+#get node_dict of mutual edges
 node_dict = mutuals(G)
 
+#cretae DIRECTED graph out of above received node_dict
 G_di = nx.DiGraph(node_dict)
+
 #get directed triangles
 trisdi = ditriangles(G_di)
 trissum = np.sum(list(trisdi.values()))/24 #see notes why divided by 24
@@ -274,9 +279,9 @@ trissum = np.sum(list(trisdi.values()))/24 #see notes why divided by 24
 #get a list of the nodes involved in each triangle
 trifin = gettris(G_di)
 
-###########################
-#GRAPH (weighted)
-###########################
+#*##########################
+#!GRAPH (weighted)
+#*##########################
 #set up graph environment
 Gw = nx.DiGraph()
 #add nodes
@@ -313,5 +318,5 @@ for year in years:
     else:
         Gw_sub = nx.set_edge_attributes(Gw_sub, weights_dict, name = "weight")
         tris = gettris(Gw_sub)
-        thickets[year] = getthicket(Gw_di, tris)[1]
+        thickets[year] = getthicket(Gw_sub, tris)[1]
         print(year)

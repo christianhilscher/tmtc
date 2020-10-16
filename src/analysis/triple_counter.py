@@ -3,11 +3,13 @@ import pandas as pd
 import networkx as nx
 import os
 from collections import Counter
-#set up directory
+
+#!set up directory
+#add path to project
 wd_lc = "/Users/llccf/OneDrive/Dokumente/tmtc/"
 wd_ch = "/Users/christianhilscher/Desktop/tmtc/"
 os.chdir(wd_lc)
-
+#adjusting print settings for Python
 np.set_printoptions(suppress=True)
 
 #**************
