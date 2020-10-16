@@ -6,7 +6,7 @@ import pandas as pd
 from tools.tables import read_csv
 import os 
 
-wd_lc = "/Users/llccf/OneDrive/Dokumente/tmtc/src/get_data/data"
+wd_lc = "/Users/llccf/OneDrive/Dokumente/tmtc/src/get_data/patent_parser/"
 os.chdir(wd_lc)
 # parse input arguments
 parser = argparse.ArgumentParser(description='Merge patent citation data.')

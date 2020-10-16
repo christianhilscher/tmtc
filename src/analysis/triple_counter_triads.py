@@ -16,7 +16,6 @@ def setup_G(df, src, dst):
     *df: dataframe containing edge pairs 
     *src: string, column of source of edge
     *dst: string, column of destination of edge
-    
     return: NetworkX.DiGraph()
     """
     #set up empty graph
@@ -120,7 +119,24 @@ def triads_and_cits(df, G_di, years, edgecol = "srcdstpats"):
 #**************
 #! DATA
 #**************
-df3 = pd.read_csv("data/df3 3.csv")
+df3post2000 = pd.read_csv("data/df3to2020.csv")
+df3pre2000 = pd.read_csv("data/df3 3.csv")
+
+#for new datasets need to rename columns real quick
+df3post2000 = df3post2000.drop(["Unnamed: 0", "patnum_x.1", "patnum_y.1", "patnum_x", "patnum_y"], axis = 1)
+
+rename_src = [col for col in df3post2000.columns if col.endswith("_x")]
+correct_src = [col.split("src")[0] for col in rename_src]
+correct_src = [col + "src" for col in correct_src]
+
+rename_dst = [col for col in df3post2000.columns if col.endswith("_y")]
+correct_dst = [col.split("src")[0] for col in rename_dst]
+correct_dst = [col + "dst" for col in correct_dst]
+
+df3post2000 = df3post2000.rename(columns = {i: j for i, j in zip(rename_src, correct_src)})
+df3post2000 = df3post2000.rename(columns = {i: j for i, j in zip(rename_dst, correct_dst)})
+
+df3 = df3post2000.append(df3pre2000)
 #note: need a new (src, dst) column for dataframe, which is now based on 
 #patent numbers
 df3["srcdstpats"] = list(zip(df3["src"], df3["dst"]))
@@ -130,10 +146,12 @@ active = df3[df3["year_src"] - df3["year_dst"] < 15]
 #**************
 #! NETWORK
 #**************
-years = range(1976, 2001)
+years = range(1976, 2016)
+
 G = setup_G(df3, "src", "dst")
 
 tris, citations, triads = triads_and_cits(active, G, years)
+shares = {year: x/y for year, x, y in zip(years, tris.values(), citations.values())}
 
 active_disc = active[(active["technology_src"] == "discrete") & (active["technology_dst"] == "discrete")]
 G = nx.create_empty_copy(G)
@@ -142,4 +160,3 @@ tris_disc, cits_disc, triads_disc = triads_and_cits(active_disc, G, years)
 active_com = active[(active["technology_src"] == "complex") & (active["technology_dst"] == "complex")]
 G = nx.create_empty_copy(G)
 tris_com, cits_com, triads_com = triads_and_cits(active_com, G, years)
-
