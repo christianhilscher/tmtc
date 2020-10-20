@@ -3,8 +3,7 @@ import glob
 import argparse
 from itertools import chain
 
-#set up directory 
-wd_lc = "/Users/llccf/OneDrive/Dokumente/tmtc/src/get_data/data"
+wd_lc = "/Users/llccf/OneDrive/Dokumente/tmtc/src/get_data/patent_parser/"
 wd_ch = "add me"
 os.chdir(wd_lc)
 

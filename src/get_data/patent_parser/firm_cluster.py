@@ -14,7 +14,9 @@ from tools.standardize import standardize_weak, standardize_strong
 from tools.tables import read_csv
 from tools.simhash import shingle, Cluster
 
-wd_lc = "/Users/llccf/OneDrive/Dokumente/tmtc/src/get_data/data/"
+import os 
+
+wd_lc = "/Users/llccf/OneDrive/Dokumente/tmtc/src/get_data/patent_parser/"
 wd_ch = "add me"
 os.chdir(wd_lc)
 

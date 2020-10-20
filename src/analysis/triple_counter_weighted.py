@@ -14,6 +14,7 @@ import ast
 wd_lc = "/Users/llccf/OneDrive/Dokumente/tmtc/"
 os.chdir(wd_lc)
 
+<<<<<<< HEAD
 ###########################
 #! FUNCTIONS
 ###########################
@@ -22,6 +23,13 @@ def get_first(num):
     return(first)
 
 def get_nodes(df, nodescol = "firm"):
+=======
+#*##########################
+#!FUNCTIONS
+#*##########################
+
+def get_nodes(df, nodescol = "nodes"):
+>>>>>>> identification
     """
     Get nodes from df containing nodes info.
 
@@ -287,9 +295,9 @@ Notes:
     - hence, in total need to divide by 24 to get same number of triangles as in undirected graph
 """
 
-###########################
-#! DATA
-###########################
+#*##########################
+#!DATA
+#*##########################
 
 nodes_df = pd.read_csv("output/tmp/nodesdata.csv")
 edges_df = pd.read_csv("output/tmp/edgesdata.csv")
@@ -308,6 +316,7 @@ df_3["firm_src"] = df_3["firm_src"].astype("int")
 df_3["firm_dst"] = df_3["firm_dst"].astype("int")
 #general information
 grant_grant = pd.read_csv("data/grant_grant.csv")
+<<<<<<< HEAD
 grant_grant["patnum"] = grant_grant["patnum"].astype("str")
 grant_grant = grant_grant.drop("Unnamed: 0", axis = 1)
 #patentsview nber classification
@@ -363,6 +372,12 @@ edges_df.to_csv("output/tmp/edgesdata.csv")
 ###########################
 #! GRAPH
 ###########################
+=======
+type(grant_grant.loc[0, "patnum"])
+#*##########################
+#!GRAPH
+#*##########################
+>>>>>>> identification
 
 #changing the setup of the analysis:
 #instead of filtering the data and then creating a graph, I will
@@ -392,46 +407,75 @@ def filterG_nodes(G, attr, val, equal = "equal"):
     subgraph = G.subgraph(nodes)
     return(subgraph)
 
-def filterG_edges(Gtot, attr, pair):
+#set up graph environment
+nodes = get_nodes(df_3)
+G = setup_G(df_3, nodes)
+
+#add all edges
+df = df_3
+years = np.arange(1976, 2001)
+for year in years:
     """
     Filter subgraph from graph based on attribute and pair described, e.g. (year, year) or (complex, complex)
     which will be technology complex.
     """
-    edges = Gtot.edges(data = True)
-    filtered = []
-    for u, v, d in edges:
-        d.pop("weight")
-        for k, val in d.items():
-            if val[attr] == pair:
-                filtered.append((u, v))
-    sub = Gtot.edge_subgraph(filtered)
-    return(sub)
+    matched_year = df[df['year'] == year]
+    #matched_year = matched_year[matched_year['firm_src'] != matched_year['firm_dst']]
+    citations = len(df_2[df_2["year"] == year])
+    #add edges
+    edges = list(zip(matched_year['firm_src'], matched_year['firm_dst']))
+    edges = list(set([i for i in edges]))
+    G.add_edges_from(edges)
+    print(year)
 
-df = edges_df
-for i in range(len(df)): 
-    year = df.loc[i, "year"]
-    if year[0] - year[1] > 15: 
-        df.drop(i)
-    print(i)
+#get node_dict of mutual edges
+node_dict = mutuals(G)
 
-def getthicket(G, years):
+#cretae DIRECTED graph out of above received node_dict
+G_di = nx.DiGraph(node_dict)
+
+#get directed triangles
+trisdi = ditriangles(G_di)
+trissum = np.sum(list(trisdi.values()))/24 #see notes why divided by 24
+
+#get a list of the nodes involved in each triangle
+trifin = gettris(G_di)
+
+#*##########################
+#!GRAPH (weighted)
+#*##########################
+#set up graph environment
+Gw = nx.DiGraph()
+#add nodes
+Gw.add_nodes_from(nodes)
+
+#add all edges
+df = df_3
+df["weights"] = np.random.rand(len(df))
+years = np.arange(1976, 2001)
+thickets = {}
+for year in years:
     """
     - Calculate thicket based on
     thicket = (# of triangles)/(# of edges in Graph)
     - note: Graph is result of mutuals(G)
     """
-    trianglesdict = {}
-    citations = {}
-    thickets = {}
-    #first, filter graph by year
-    for x in years:
-        subgraph = filterG_nodes(G, "year", x, equal = "leq")
-        tris = list(nx.triangles(G).values())
-        tris = np.array(tris)
-        tris = np.sum(tris)/3
-        cit = subgraph.number_of_edges()
-        thickets[x] = cit/tris
-        trianglesdict[x] = tris
-        citations[x] = cit
-        print(str(x) + " done")
-    return(thickets, triangles, citations)
+    year = 1976
+    matched_year = df[df['year'] == year]
+    #matched_year = matched_year[matched_year['firm_src'] != matched_year['firm_dst']]
+    citations = len(df_2[df_2["year"] == year])
+    #add edges
+    edges = list(zip(matched_year['firm_src'], matched_year['firm_dst'], matched_year["weights"]))
+    #right now: if same edge appears > 1 then the weight is updated every time edge appears
+    #since the duplicates are also relying on the weight
+    edges = list(set([i for i in edges]))
+    Gw.add_weighted_edges_from(edges)
+    node_dict_w, weights_dict = mutuals(Gw, weights = True)
+    Gw_sub = nx.Graph(node_dict_w)
+    if len(list(Gw_sub.edges())) == 0:
+        print(year)
+    else:
+        Gw_sub = nx.set_edge_attributes(Gw_sub, weights_dict, name = "weight")
+        tris = gettris(Gw_sub)
+        thickets[year] = getthicket(Gw_sub, tris)[1]
+        print(year)

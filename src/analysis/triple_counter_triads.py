@@ -16,7 +16,6 @@ def setup_G(df, src, dst):
     *df: dataframe containing edge pairs 
     *src: string, column of source of edge
     *dst: string, column of destination of edge
-    
     return: NetworkX.DiGraph()
     """
     #set up empty graph
@@ -68,6 +67,19 @@ def get_triads(G, nodes = None):
     number = len(triads)
     return(number, triads)
 
+def getthicket(G, tris, weight = "weight"):
+    """
+    Follow-up funtion to get_triads. Use list of triangles to get weights and add up
+    """
+    weight_sums = {}
+    for x in tris:
+        w1 = G[x[0]][x[1]][weight]
+        w2 = G[x[0]][x[2]][weight]
+        w3 = G[x[1]][x[2]][weight]
+        weight_sums[(x[0], x[1], x[2])] = np.sum((w1, w2, w3))
+    thicket = np.sum(list(weight_sums.values()))
+    return(weight_sums, thicket)
+
 def triads_and_cits(df, G_di, years, edgecol = "srcdstpats"):
     """
     Function that binds all other functions to count total patent citations and
@@ -89,6 +101,7 @@ def triads_and_cits(df, G_di, years, edgecol = "srcdstpats"):
     #initialize empty dictionaries that will be filled 
     cit_dict = {}
     tri_dict = {}
+    triads_dict = {}
     #loop over years 
     for i in years:
         """
@@ -108,27 +121,44 @@ def triads_and_cits(df, G_di, years, edgecol = "srcdstpats"):
         #add edges to directed graph; note: not a multigraph, same edge that appears multiple times only added once
         G_di.add_edges_from(edges)
         #count triangles 
-        tris = get_triads(G_di)
+        tris, triads = get_triads(G_di)
         #add everything to dictionaries 
         tri_dict[i] = tris 
+        triads_dict[i] = triads
         cit_dict[i] = tot_cit
         print(i)
-    return(tri_dict, cit_dict)
+    return(tri_dict, cit_dict, triads_dict)
 
 #**************
 #! DATA
 #**************
-df3 = pd.read_csv("data/df3 3.csv")
+df3post2000 = pd.read_csv("data/df3to2020.csv")
+df3pre2000 = pd.read_csv("data/df3 3.csv")
+df3 = pd.read_csv("data/df3_all.csv")
+
 #note: need a new (src, dst) column for dataframe, which is now based on 
 #patent numbers
 df3["srcdstpats"] = list(zip(df3["src"], df3["dst"]))
+
 #filter for only active patents
 active = df3[df3["year_src"] - df3["year_dst"] < 15]
 
 #**************
 #! NETWORK
 #**************
-years = range(1976, 2001)
+years = range(1976, 2016)
+
 G = setup_G(df3, "src", "dst")
 
-triads, citations = triads_and_cits(active, G, years)
+tris, citations, triads = triads_and_cits(active, G, years)
+shares = {year: x/y for year, x, y in zip(years, tris.values(), citations.values())}
+
+active_disc = active[(active["technology_src"] == "discrete") & (active["technology_dst"] == "discrete")]
+G = nx.create_empty_copy(G)
+tris_disc, cits_disc, triads_disc = triads_and_cits(active_disc, G, years)
+shares_disc = {year: x/y for year, x, y in zip(years, tris_disc.values(), citations.values())}
+
+active_com = active[(active["technology_src"] == "complex") & (active["technology_dst"] == "complex")]
+G = nx.create_empty_copy(G)
+tris_com, cits_com, triads_com = triads_and_cits(active_com, G, years)
+shares_com = {year: x/y for year, x, y in zip(years, tris_com.values(), citations.values())}

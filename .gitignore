@@ -132,7 +132,10 @@ dmypy.json
 /data
 /output
 /tmp
+<<<<<<< HEAD
 /literature
+=======
+>>>>>>> identification
 /Literature
 /src/get_data/data
 .vscode/
@@ -141,6 +144,6 @@ dmypy.json
 =======
 .DS_Store
 /src/get_data/.DS_Store
-src/get_data/.Rhistory
+src/get_data/.History
 /src/tries.jl
 >>>>>>> 34faf9f9cb6eb06b342fe6c7a6b48b7e44e64d06

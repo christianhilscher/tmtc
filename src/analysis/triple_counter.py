@@ -10,7 +10,7 @@ import ast
 wd_lc = "/Users/llccf/OneDrive/Dokumente/tmtc/"
 wd_ch = "/Users/christianhilscher/Desktop/tmtc/"
 os.chdir(wd_lc)
-
+#adjusting print settings for Python
 np.set_printoptions(suppress=True)
 
 #**************
