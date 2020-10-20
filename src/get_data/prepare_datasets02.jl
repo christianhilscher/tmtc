@@ -83,11 +83,11 @@ function make_df(raw_cites::DataFrame,
     # ATTENTION : Assiging new firm numbers here; need it for graph later
     # edit_firms = make_ids(raw_firms, "firm_num")
 
-    owner_source = leftjoin(raw_cites, edit_firms, on = :src => :patnum)
+    owner_source = leftjoin(raw_cites, raw_firms, on = :src => :patnum)
     owner_source = rename(owner_source, "firm_num" => "firm_src")
 
     # Getting the owners of the cited patents
-    dst_source = leftjoin(owner_source, edit_firms, on = :dst => :patnum)
+    dst_source = leftjoin(owner_source, raw_firms, on = :dst => :patnum)
     dst_source = rename(dst_source, "firm_num" => "firm_dst")
 
     rename_cols = filter!(x->x != "patnum", names(edit_grants))
@@ -119,10 +119,6 @@ function make_year(df::DataFrame)
     return df
 end
 
-function drop_missings(df::DataFrame)
-    df_out = dropmissing(df)
-    return df_out
-end
 
 function rm_self_citations(df::DataFrame)
     # Removing those who cite themselves
@@ -143,24 +139,17 @@ df_firm_grant = CSV.read("grant_firm.csv")
 df_grants = CSV.read("grant_grant.csv")
 
 df_cite = CSV.read("grant_cite.csv")
-dropmissing!(df_cite)
+df_cite = dropmissing(df_cite)
 
 cd(data_path_tmp)
-df_ipc = CSV.read("ipcs.csv")
-cd(data_path_full)
 
-df_nber = CSV.read("nber.tsv")
-df_nber_cat = CSV.read("nber_category.tsv")
-df_nber_subcat = CSV.read("nber_subcategory.tsv")
-
-
-grant_info = add_info(df_grants, df_ipc, df_nber, df_nber_cat, df_nber_subcat)
+grant_info = CSV.read("df_info.csv")
 df1 = make_df(df_cite, grant_info, df_firm_grant)
 
 df12 = to_int(df1, "src")
 df13 = to_int(df12, "dst")
 
-df2 = drop_missings(df13)
+df2 = dropmissing(df13)
 df3 = rm_self_citations(df2)
 df4 = make_unique(df3)
 

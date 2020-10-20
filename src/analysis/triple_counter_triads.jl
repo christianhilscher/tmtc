@@ -34,6 +34,23 @@ function identify_triads(g::SimpleDiGraph)
 end
 
 """
+Returning tuples of triads
+"""
+function identify_triads_tuples(g::SimpleDiGraph)
+
+    outlist = [Vector{Int64}() for _ in vertices(g)]
+    # list indicating all outneighbors of each vertex
+    @inbounds for u in vertices(g)
+        for v in outneighbors(g, u)
+            push!(outlist[u], v)
+        end
+    end
+
+    triads = triadtuples(outlist, 1:nv(g))
+    return triads
+end
+
+"""
 Same function as before just running on two processors
 No idea yet whether this is actually faster because of overhead
 """
@@ -100,6 +117,33 @@ function triadcount(neighborlist::Vector{Array{Int64, 1}}, interv::UnitRange{Int
     return ntri
 end
 
+"""
+Returning all the tuples of a given triangle
+"""
+function triadtuples(neighborlist::Vector{Array{Int64, 1}}, interv::UnitRange{Int64})
+    ntri = Vector{Tuple{Int64, Int64, Int64}}(undef, length(interv))
+
+    # u is a UnitRange here so iteration works
+    @inbounds for u = interv
+        outu = neighborlist[u]
+        lenu = length(outu)
+
+        # looking through all outneighbors of vertex u
+        for i = 1:lenu
+            v = outu[i]
+
+            # vertex v is an outneighbor of vertex u
+            # checking outneighbors of vertex v
+            # if outneighbor of vertex v is also an outneighbor of vertex v => triad
+            for j in neighborlist[v]
+                if in(j, outu)
+                    push!(ntri, tuple(u, i, j))
+                end
+            end
+        end
+    end
+    return ntri
+end
 
 function filter_technology(df::DataFrame, tech::String)
 
@@ -112,22 +156,21 @@ Wrapper for most often used function
 
     * Getting the triads/triangles for each year separately
     * Since the edges are added to graph on a yearly basis, the triad count is already cumulative
-
 """
 function count_triangles(df::DataFrame)
 
     # Number of nodes is at most the maxmimum of src or dst
-    n_nodes = maximum([maximum(df[!,:src]), maximum(df[!,:dst])])
+    # n_nodes = maximum([maximum(df[!,:src]), maximum(df[!,:dst])])
 
     # Initializig graph and arrays
-    G_directed = SimpleDiGraph(n_nodes)
+    G_directed = SimpleDiGraph()
     years = sort!(unique(df[!, :year_src]))
     trs = Array{Int64}(undef, length(years))
     cts = Array{Int64}(undef, length(years))
 
     # Counting each year separately
     for (ind, year) in enumerate(years)
-        # Using a view here for less memory allocation
+        # Using a view here for smaller memory allocation
         rel = view(df, df[!, :year_src].==year, :srcdst)
 
         for el in rel
@@ -135,7 +178,7 @@ function count_triangles(df::DataFrame)
         end
 
         # Identifying triads and # of citations
-        trs[ind] = identify_triads(G_directed)
+        trs[ind] = identify_triads_multicore(G_directed)
         cts[ind] = length(rel)
     end
 
@@ -146,12 +189,16 @@ end
 ## Real data
 cd(data_path_tmp)
 
-df3 = CSV.read("df3.csv")
+df3 = CSV.read("df3_CH.csv")
 df3[!, :srcdst] = [(df3[i, :src], df3[i, :dst]) for i in eachindex(df3[!, :firm_src])]
 df = df3[df3[!,:year_src] - df3[!,:year_dst] .< 15,:]
 
-
 ## Calculating
+
+df_complex = filter_technology(df, "complex")
+df_discrete = filter_technology(df, "discrete")
+
+
 
 discretex, discretey = count_triangles(df_discrete)
 complexx, complexy = count_triangles(df_complex)

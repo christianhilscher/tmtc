@@ -1,3 +1,30 @@
+using Pkg
+using CSV, DataFrames
+using PyCall
+using Levenshtein
+
+wd = "/Users/christianhilscher/Desktop/tmtc/"
+
+data_path = joinpath(wd, "data/")
+data_path_full = joinpath(wd, "data/full/")
+data_path_tmp = joinpath(wd, "data/tmp/")
+graph_path = joinpath(wd, "output/tmp/")
+
+cd(data_path)
+assignee = CSV.read("assignee.tsv")
+raw_assignee = CSV.read("rawassignee.tsv")
+patents = CSV.read("patent.tsv")
+
+println(names(patents))
+println(names(assignee))
+println(names(raw_assignee))
+
+df = leftjoin(assignee, raw_assignee, on = :id => :assignee_id, makeunique=true)
+
+
+println(names(df))
+
+py"""
 import re
 
 #
@@ -82,3 +109,18 @@ def standardize_strong(name):
     name = gener0_re.sub('', name)
     name = white0_re.sub(' ', name)
     return name.strip()
+
+"""
+
+un_names = unique(df[!,:organization])
+un_names = un_names[ismissing.(un_names).!=1]
+std_names = Vector{String}(undef, length(un_names))
+
+@progress for (ind, element) in enumerate(un_names)
+    std_names[ind] = py"standardize_strong"(element)
+end
+
+std_names
+
+
+levenshtein(std_names[1], std_names[2])
