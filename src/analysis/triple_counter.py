@@ -3,6 +3,9 @@ import pandas as pd
 import networkx as nx
 import os
 from collections import Counter
+import itertools
+import ast
+
 #set up directory
 wd_lc = "/Users/llccf/OneDrive/Dokumente/tmtc/"
 wd_ch = "/Users/christianhilscher/Desktop/tmtc/"
@@ -13,14 +16,50 @@ np.set_printoptions(suppress=True)
 #**************
 #! FUNCTIONS
 #**************
+
+def setup_G(df, src, dst):
+    """
+    Set up a NetworkX.DiGraph() with nodes being unique elements of src and dst columns 
+    of df combined. 
+    *df: dataframe containing edge pairs 
+    *src: string, column of source of edge
+    *dst: string, column of destination of edge
+    
+    return: NetworkX.DiGraph()
+    """
+    #set up empty graph
+    G = nx.DiGraph() 
+    #get unique nodes
+    nodes = df[src].append(df[dst]).drop_duplicates().tolist()
+    #add nodes to graph
+    G.add_nodes_from(nodes)
+    return(G)
+
+def setup_G_edges(df, G, years, edgecol = "srcdst"): 
+    """
+    Add edges to NetworkX.DiGraph() returned by setup_G. 
+    Used to get complete graph including all edges.
+    
+    *df: dataframe 
+    *years: list of years 
+    
+    returns: NetworkX.DiGraph()
+    """
+    edges = df[edgecol].tolist()
+    G.add_edges_from(edges)
+    return(G)
+
 def mutuals(G):
     """
-    A function to find the list of nodes that are successors as well as
-    predecessors of node n in a directed networkx graph G.
-    This is done for all nodes and dictionary returned is structured as
-    {node: list of nodes that are predec and succec, node2: ...}
-    G: directed Networkx Draph
+    Find the list of nodes that are successors as well as predecessors of node n 
+    in a Networkx.DiGraph(). This is done for all nodes. Nodes that do not have any 
+    nodes that are predecessors as well as successors as are deleted.
+    
+    G: Networkx.DiGraph() 
+    
+    return: dictionary structured as {node1: list of neighbor and predec nodes, node2: ...}
     """
+    nodes = G.nodes()
     node_dict = {}
     nbrs = ((n, G._pred[n], G._succ[n]) for n in G.nbunch_iter(nodes))
     for i, preds, succs in nbrs:
@@ -29,196 +68,260 @@ def mutuals(G):
             if y in succs:
                 both_dir.append(y)
         node_dict[i] = both_dir
+    for k, v in list(node_dict.items()):
+        if v == []:
+            del node_dict[k]
     return(node_dict)
 
-def get_tri(df, years):
-    #counter for total references
-    tot_ref = 0
-    #initialize empty dictionaries to be filled with year: value
-    tri_dict = {}
+def filter_tech(df, tech):
+    """
+    Filter edges_df for discrete, complex or mixed citation pairs.
+    
+    *df: edges dataframe
+    *tech: technology string marking column
+    
+    return: tech_df, dataframe only containing entries belonging to tech
+    """
+    tech_df = df[df[tech] == True]
+    return(tech_df)
+
+def mutdf(df, node_dict):
+    """
+    Filter edges dataframe for entries that only inlcude firms that are in graph that results
+    from applying mutuals(G). 
+    
+    #!I DON'T KNOW WHETHER THIS IS THE DENOMINATOR WE WANT, IF SO ADJUST IN tris_and_cits()
+    
+    """
+    firms = []
+    for k, v in node_dict.items(): 
+        firms.append(k)
+        for i in v: 
+            firms.append(i)
+    #remove duplicates
+    firms = list(dict.fromkeys(firms))
+    #filter df 
+    mutdf = df[df["firm_src"].isin(firms) | df["firm_dst"].isin(firms)]
+    return(mutdf)
+
+def get_tri(G):
+    """
+    Get total number of triangles in G. 
+    See Networkx.triangles doc for why divided by 3.
+    
+    G: Networkx.Graph() 
+    
+    return: integer number of total triangles
+    """
+    tris = np.sum(list(nx.triangles(G).values()))/3
+    return(tris)
+
+def tris_and_cits(df, G_di, years, edgecol = "srcdst"):
+    """
+    Function that binds all other functions to count total patent citations and
+    triangles for all years supplied. 
+    
+    #*df: dataframe containing info on edges
+    #*G: initial NetworkX.DiGraph() that edges are added to
+    #*years: iterable of years of interest
+    #*edgecol: column containing tuples of edges (src, dst)
+    
+    returns: 2 dictionaries containing number of citations and triangles structured as 
+    {year: value}.
+    
+    Note: thickets are not returned automatically since denominator of total citations for thicket 
+    is not necessarily number of total citations returned here. See README. 
+    """
+    #set up counter for total citations 
+    tot_cit = 0 
+    #initialize empty dictionaries that will be filled 
     cit_dict = {}
-    thicket_dict = {}
-    for year in years:
+    tri_dict = {}
+    #loop over years 
+    for i in years:
         """
         this loop:
             - gets data for respective year
             - adds citations from this year as edges to G
-            - makes neighbor analysis
+            - makes neighbor analysis using mutuals(G)
             - creates a new graph only with nodes that have mutually directed edges
             - counts triangles and fills up initialized dicts
         """
-        matched_year = df[df['year'] == year]
-        #matched_year = matched_year[matched_year['firm_src'] != matched_year['firm_dst']]
-        citations = len(df_2[df_2["year"] == year])
-        tot_ref = tot_ref + citations
-        #add edges
-        edges = list(zip(matched_year['firm_src'], matched_year['firm_dst']))
-        edges = list(set([i for i in edges]))
-        G.add_edges_from(edges)
-        G.number_of_edges()
-        node_dict = mutuals(G)
-        #delete nodes that have no nodes connected as mutual successors as predecessors
-        for k, v in list(node_dict.items()):
-            if v == []:
-                del node_dict[k]
-        G_new = nx.Graph(node_dict)
-        tris = list(nx.triangles(G_new).values())
-        tris_arr = np.array(tris)
-        tris_sum = np.sum(tris_arr)/3
-        thicket_dict[str(year)] = tris_sum/tot_ref
-        tri_dict[str(year)] = tris_sum
-        cit_dict[str(year)] = tot_ref
-        print(year)
-    return(thicket_dict, tri_dict, cit_dict)
+        #get data of interest for respective year 
+        doi = df[df["year_src"] == i]
+        #get number of ctiations in this year (len(doi)) and add to count 
+        tot_cit = len(doi) + tot_cit
+        #get edges 
+        edges = doi[edgecol].tolist()
+        #add edges to directed graph; note: not a multigraph, same edge that appears multiple times only added once
+        G_di.add_edges_from(edges)
+        #now get undirected graph 
+        mutualnodes = mutuals(G)
+        G_undi = nx.Graph(mutualnodes)
+        #count triangles 
+        tris = get_tri(G_undi)
+        #add everything to dictionaries 
+        tri_dict[i] = tris 
+        cit_dict[i] = tot_cit
+        print(i)
+    return(tri_dict, cit_dict)
 
-def tech_plot(x, total, disc, com, title, ylab, xlab = "Year"):
+def get_thicket(tris, cits, years): 
     """
-    Function to create plots with total, discrete and complex data.
+    Given dictionaries returned by tris_and_cits calculate thicket for each year. 
+    
+    *tris: dictionary of triangles by year
+    *cits: dictionary of citations by year 
+    *years: iterable of years of interest
+    
+    return: thicket = # of triangles/# of total citations 
     """
-    plot = figure(plot_width = 500, plot_height = 500, x_axis_label = xlab,
-                y_axis_label = ylab, title = title)
-    plot.line(x, total, color = "blue", legend_label = "total")
-    plot.line(x, disc, color = "red", legend_label = "discrete")
-    plot.line(x, com, color = "orange", legend_label = "complex")
-    plot.legend.location = "top_left"
-    return(plot)
+    thickets = {i: tris[i]/cits[i] for i in years}
+    return(thickets)
 
-def barplot(top, title, ylab, x, ticks, xlab = "Technology Field"):
+def get_trilist(G_undi, nodes = None):
     """
-    Create vbarplots for share of citations across fields in different variations.
+    Gets a list of lists of triangles existing in NetworkX.Graph() G.
+    
+    *G = NetworkX.Graph()
+    
+    returns: list of lists containing firm numbers, inner list forming a triangle
     """
-    plot = figure(plot_width = 500, plot_height = 500,
-                title = title,
-                x_axis_label = xlab, y_axis_label = ylab)
-    plot.vbar(x = x, top = top, width = 0.9)
-    plot.xaxis.ticker = list(ticks.keys())
-    plot.xaxis.major_label_overrides = ticks
-    plot.xaxis.major_label_orientation = 0.8
-    return(plot)
+    alltris = []
+    tridict = {}
+    nodes = None
+    if nodes is None:
+        nodes_nbrs = G_undi.adj.items()
+    else:
+        nodes_nbrs = ((n, G_undi[n]) for n in G_undi.nbunch_iter(nodes))
+    for v, v_nbrs in nodes_nbrs:
+        vs = set(v_nbrs) - {v}
+        for j in vs:
+            jnbrs = set(G_undi.adj[j]) - {j}
+            both = list(jnbrs.intersection(vs))
+            tridict[(v, j)] = both
+    for j, x in tridict.items():
+        for i in x:
+            alltris.append(sorted((j[0], j[1], i)))
+    k = alltris 
+    k.sort()
+    fin = list(k for k,_ in itertools.groupby(k))
+    return(fin)
 
+def get_weights(df, srcdstcol = "srcdst"):
+    #sort tuples to count all edges between two firms for weighting
+    df["srcdst_sort"] = df[srcdstcol].apply(sorted).apply(tuple)
+    #create a dataframe containing the weights 
+    weights = df.groupby("srcdst_sort").count().reset_index()
+    weights = weights.rename(columns = {"srcdst_sort": "edge", "src": "connections"})[["edge", "connections"]]
+    return(weights)
+
+def get_triedges(trilist):
+    triedges = {}
+    for i in trilist:
+        triedges[i] = list(itertools.combinations(i, 2))
+    return(triedges)
+
+def get_triedges_df(triedges):     
+    triedges_df = pd.DataFrame.from_dict(triedges, orient = "index")
+    triedges_df["edges"] = triedges_df.values.tolist()
+    return(triedges_df)
+
+def tricount(triedges_df, weights_df, colnums = 3):     
+    #now merge based on each edge with weights dataframe
+    for i in range(0, colnums): 
+        triedges_df = triedges_df.merge(weights_df, left_on = i, right_on = "edge", how = "left", indicator = True)
+        triedges_df = triedges_df.drop(["_merge", "edge"], axis = 1)
+    triedges_df["values"] = triedges_df.iloc[:, 4:7].sum(axis = 1)
+    values = triedges_df["values"].tolist()
+    return(values)
+
+def triangles_edgecount(edges_df, G_di, years, edgecol = "srcdst"):
+    tris = {}
+    tri_counted = 0
+    for i in years: 
+        doi = edges_df[edges_df["year_src"] == i]
+        doi_weights = edges_df[edges_df["year_src"] <= i]
+        weights = get_weights(doi_weights)
+        edges = doi[edgecol].tolist()
+        G_di.add_edges_from(edges)
+        G_undi = nx.Graph(mutuals(G_di))
+        trilist = get_trilist(G_undi)
+        trilist = map(tuple, trilist)
+        triedges = get_triedges(trilist)
+        triedges_df = get_triedges_df(triedges)
+        if len(triedges_df) != 0:
+            tri_counted = np.sum(tricount(triedges_df, weights)) #+ tri_counted
+            tris[i] = tri_counted
+            print(i, tris[i], sep = ":")
+        else:
+            tris[i] = 0
+    return(tris)
 
 #**************
 #! DATA
 #**************
-df_full = pd.read_csv("data/df1.csv")
-df_2 = pd.read_csv("data/df2.csv")
-df_3 = pd.read_csv("data/df3.csv")
-df_4 = pd.read_csv("data/df4.csv")
-df_disc = df_3[df_3["technology"] == "discrete"]
-df_com = df_3[df_3["technology"] == "complex"]
+
+edges_df = pd.read_csv("data/df3 3.csv")
+edges_df["srcdst"] = edges_df["srcdst"].apply(ast.literal_eval)
+#* add identifier for technology 
+edges_df["complex"] = (edges_df["technology_src"] == "complex") & (edges_df["technology_dst"] == "complex")
+edges_df["discrete"] = (edges_df["technology_src"] == "discrete") & (edges_df["technology_dst"] == "discrete")
+edges_df["mixed"] = (edges_df["complex"] == False) & (edges_df["discrete"] == False)
+
+#* filter for 15 year expiration 
+active = edges_df[edges_df["year_src"] - edges_df["year_dst"] < 15]
 
 #**************
 #! NETWORK
 #**************
 
-#! Set up graph
-#initialize empty dictionaries to be filled "name: dict" for each different dataframe
-tri_dict_all = {}
-cit_dict_all = {}
-thicket_dict_all = {}
-#create nodes from combined list of owners_src and owners_dst
-#drop duplicates of combined list such that each firm only appears once
-owners_src = df_3["firm_src"].tolist()
-owners_dst = df_3["firm_dst"].tolist()
-total = owners_src + owners_dst
-total = list(map(int, total))
-tot_uniq = list(dict.fromkeys(total))
-#set up graph
-G = nx.DiGraph()
-#add nodes to graph
-nodes = tot_uniq
-G.add_nodes_from(nodes)
+#* set up Graph 
+years = range(1976, 2001)
+G = setup_G(active, "firm_src", "firm_dst")
 
-#! Total, discrete and complex technology triangles
-#set up names for dictionaries
-names = ["total", "discrete", "complex"]
-#df to loop over
-dfs = [df_4, df_disc, df_com]
-#years of interest
-years = np.arange(1976, 2001)
+#* Total
+#* get triangles and citations of all patents
+tris, cits = tris_and_cits(active, G, years)
+thicket = get_thicket(tris, cits, years)
 
-#loop over names and dataframes
-for name, df in zip(names, dfs):
-    #clean graph from all edges
-    G.remove_edges_from(list(G.edges()))
-    thicket_dict_all[name], tri_dict_all[name], cit_dict_all[name] = get_tri(df, years)
-    print(name + " done")
+#* complex tech triangles and citations 
+com_df = filter_tech(active, "complex")
+G.remove_edges_from(list(G.edges))
+tricom, citcom = tris_and_cits(com_df, G, years)
+thicketcom = get_thicket(tricom, cits, years)
 
-thickets_all = pd.DataFrame.from_dict(thicket_dict_all)
-tri_all = pd.DataFrame.from_dict(tri_dict_all)
-cit_all = pd.DataFrame.from_dict(cit_dict_all)
+#* discrete tech triangles and citations 
+disc_df = filter_tech(active, "discrete")
+G.remove_edges_from(list(G.edges))
+tridisc, citdisc = tris_and_cits(disc_df, G, years)
+thicketdisc = get_thicket(tridisc, cits, years)
 
-#! Triangles by ipc
-thickets_ipc = {}
-tri_ipc = {}
-cit_ipc = {}
-#remove all edges from G again
-G.remove_edges_from(list(G.edges()))
-#get field and field_num pair
-fields = [(x, y) for x,y in zip(df_3["field_num"], df_3["field"])]
-
-fields = list(dict.fromkeys(fields))
-field_nums = [x[0] for x in fields]
-field_names = [x[1] for x in fields]
-fields_df = pd.DataFrame({"field": field_names, "field_num": field_nums})
-fields_df = fields_df.sort_values(by = "field_num", axis = 0).reset_index().drop("index", axis = 1)
-
-for field in fields:
-    G.remove_edges_from(list(G.edges()))
-    df = df_3[df_3["field_num"] == field[0]]
-    name = field[1]
-    thickets_ipc[name], tri_ipc[name], cit_ipc[name] = get_tri(df, years)
-    print(name + " done")
-
-df_tri_ipc = pd.DataFrame.from_dict(tri_ipc)
-df_cit_ipc = pd.DataFrame.from_dict(cit_ipc)
-df_thicket_ipc = pd.DataFrame.from_dict(thickets_ipc)
+#* triangles counted by using ocurrence of each edge as a weight    
+years = range(1976, 2001)
+G = setup_G(active, "firm_src", "firm_dst")
+triangles_edge_counted = triangles_edgecount(active, G, years = years)
+triangles_edge = pd.DataFrame({"year": list(triangles_edge_counted.keys()), 
+                            "values": list(triangles_edge_counted.values())})
 
 
-#**************
-#! PLOTS
-#**************
-from bokeh.plotting import figure, output_notebook, show
-from bokeh.io import export_png
-from bokeh.models import NumeralTickFormatter
+#!Save data 
+#get into frame 
+techs = ["complete", "complex", "discrete"]
+triall = {}
+citsall = {}
+thicketall = {}
+for i, j in zip(techs, [tris, tricom, tridisc]): 
+    triall[i] = j
+for i, j in zip(techs, [cits, citcom, citdisc]):
+    citsall[i] = j
+for i, j in zip(techs, [thicket, thicketcom, thicketdisc]): 
+    thicketall[i] = j
 
-output_notebook()
+thicketdf = pd.DataFrame.from_dict(thicketall)
+tridf = pd.DataFrame.from_dict(triall)
+citdf = pd.DataFrame.from_dict(citsall)
 
-#* figure on absolute number of triples
-p_abstrip = tech_plot(years, tri_all["total"], tri_all["discrete"], tri_all["complex"],
-                    "Total number of triples", "Absolute number of triples")
-#p.yaxis.formatter = NumeralTickFormatter(format = "0000")
-show(p_abstrip)
-#export_png(p_abstrip, filename = "output/documentation/Week33/abs_triples_tech.png")
-
-#* figure on share of triples relative to total citations
-p_share = tech_plot(years, thickets_all["total"], thickets_all["discrete"], thickets_all["complex"],
-                    "Share of triples realtive to all citations", "Share of triples")
-show(p_share)
-#export_png(p_share, filename = "output/documentation/Week33/shares_triples_totalcit.png")
-
-#* shares by ipc
-ticks = [(x, y) for x, y in zip(df_2["field_num"], df_2["field"])]
-ticks = list(dict.fromkeys(ticks))
-ticks = dict(ticks)
-
-ipc_shares = df_tri_ipc.loc["2000", :]/df_tri_ipc.loc["2000", :].sum()
-
-p_ipc = barplot(top = ipc_shares, title = "IPC Shares", ylab = "Percentage share". ticks = ticks, x = field_nums)
-show(p_ipc)
-#export_png(p_ipc, filename = "output/documentation/Week33/ipc_shares.png")
-
-#* citations per field
-df2_count = df_2.groupby("field_num").count()
-counter = df2_count["year"]
-
-p_cit = barplot(top = counter, title = "Total citations per field in df2", ylab = "Absolute Number", ticks = ticks, x = field_nums)
-show(p_cit)
-#export_png(p_cit, filename = "output/documentation/Week33/cit_numbers.png")
-
-#* share of citation per field relative to all citations
-df2_shares = df2_count["year"]/len(df_2)
-
-p_citshare = barplot(top = df2_shares, title = "Share of citations per field relative to total citations", ylab = "Percentage Share", ticks = ticks, x = field_nums)
-show(p_citshare)
-#export_png(p_citshare, filename = "output/documentation/Week33/cit_shares.png")
+thicketdf.to_csv("output/tmp/thickets.csv")
+tridf.to_csv("output/tmp/tris.csv")
+citdf.to_csv("output/tmp/cits.csv")
