@@ -135,26 +135,7 @@ def triads_and_cits(df, G_di, years, edgecol = "srcdstpats"):
 df3post2000 = pd.read_csv("data/df3to2020.csv")
 df3pre2000 = pd.read_csv("data/df3 3.csv")
 df3 = pd.read_csv("data/df3_all.csv")
-'''
-#!merging the two datasets together 
-#!just let it tunr once and save the csv afterwards
-#for new datasets need to rename columns real quick
-df3post2000 = df3post2000.drop(["Unnamed: 0", "patnum_x.1", "patnum_y.1", "patnum_x", "patnum_y"], axis = 1)
 
-rename_src = [col for col in df3post2000.columns if col.endswith("_x")]
-correct_src = [col.split("src")[0] for col in rename_src]
-correct_src = [col + "src" for col in correct_src]
-
-rename_dst = [col for col in df3post2000.columns if col.endswith("_y")]
-correct_dst = [col.split("src")[0] for col in rename_dst]
-correct_dst = [col + "dst" for col in correct_dst]
-
-df3post2000 = df3post2000.rename(columns = {i: j for i, j in zip(rename_src, correct_src)})
-df3post2000 = df3post2000.rename(columns = {i: j for i, j in zip(rename_dst, correct_dst)})
-
-df3 = df3post2000.append(df3pre2000)
-df3.to_csv("data/df3_all.csv")
-'''
 #note: need a new (src, dst) column for dataframe, which is now based on 
 #patent numbers
 df3["srcdstpats"] = list(zip(df3["src"], df3["dst"]))
@@ -175,7 +156,9 @@ shares = {year: x/y for year, x, y in zip(years, tris.values(), citations.values
 active_disc = active[(active["technology_src"] == "discrete") & (active["technology_dst"] == "discrete")]
 G = nx.create_empty_copy(G)
 tris_disc, cits_disc, triads_disc = triads_and_cits(active_disc, G, years)
+shares_disc = {year: x/y for year, x, y in zip(years, tris_disc.values(), citations.values())}
 
 active_com = active[(active["technology_src"] == "complex") & (active["technology_dst"] == "complex")]
 G = nx.create_empty_copy(G)
 tris_com, cits_com, triads_com = triads_and_cits(active_com, G, years)
+shares_com = {year: x/y for year, x, y in zip(years, tris_com.values(), citations.values())}
